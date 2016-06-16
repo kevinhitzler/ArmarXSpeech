@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.design.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    tools:context="com.example.kit.armarxspeech.MainActivity">
+
+    <android.support.design.widget.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:theme="@style/AppTheme.AppBarOverlay">
+
+        <android.support.v7.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorPrimary"
+            app:popupTheme="@style/AppTheme.PopupOverlay" />
+
+    </android.support.design.widget.AppBarLayout>
+
+    <include layout="@layout/content_main" />
+
+
+
+    <!-- :nextFocusUp and :nextFocusLeft have been set to the id of this component
+    to prevent the dummy from receiving focus again -->
+    <AutoCompleteTextView android:id="@+id/autotext"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:nextFocusUp="@id/autotext"
+        android:nextFocusLeft="@id/autotext"/>
+
+
+    <EditText
+        android:id="@+id/cmd"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|left"
+        android:layout_marginRight="@dimen/cmd_margin_right"
+        android:layout_marginBottom="@dimen/cmd_margin_bottom"
+        android:layout_marginLeft="@dimen/cmd_margin_left"
+        android:drawablePadding="20dp"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:hint="Or type your robot command." />
+
+
+    <android.support.design.widget.FloatingActionButton
+        android:id="@+id/fab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|right|end"
+        android:layout_margin="@dimen/fab_margin"
+        android:tint="@color/white"
+        android:src="@android:drawable/ic_btn_speak_now" />
+
+
+
+</android.support.design.widget.CoordinatorLayout>
+
