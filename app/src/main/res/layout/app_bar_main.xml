@@ -26,37 +26,50 @@
     <include layout="@layout/content_main" />
 
 
-
-    <!-- :nextFocusUp and :nextFocusLeft have been set to the id of this component
-    to prevent the dummy from receiving focus again -->
-    <AutoCompleteTextView android:id="@+id/autotext"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:nextFocusUp="@id/autotext"
-        android:nextFocusLeft="@id/autotext"/>
-
-
-    <EditText
-        android:id="@+id/cmd"
+    <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|left"
-        android:layout_marginRight="@dimen/cmd_margin_right"
-        android:layout_marginBottom="@dimen/cmd_margin_bottom"
-        android:layout_marginLeft="@dimen/cmd_margin_left"
-        android:drawablePadding="20dp"
-        android:textAppearance="?android:attr/textAppearanceMedium"
-        android:hint="Or type your robot command." />
+        android:layout_gravity="bottom">
+
+        <LinearLayout
+            android:id="@+id/horizontalBottomBar"
+            android:layout_width="match_parent"
+            android:orientation="horizontal"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom">
+
+            <EditText
+                android:id="@+id/cmd"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="@dimen/cmd_margin_left"
+                android:layout_marginTop="@dimen/cmd_margin_top"
+                android:textAppearance="?android:attr/textAppearanceMedium"
+                android:hint="Or type your robot command." />
 
 
-    <android.support.design.widget.FloatingActionButton
-        android:id="@+id/fab"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|right|end"
-        android:layout_margin="@dimen/fab_margin"
-        android:tint="@color/white"
-        android:src="@android:drawable/ic_btn_speak_now" />
+                <android.support.design.widget.FloatingActionButton
+                    android:id="@+id/fab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="@dimen/fab_margin"
+                    android:tint="@color/white"
+                    android:src="@android:drawable/ic_btn_speak_now" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/prompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="@dimen/prompt_padding"
+            android:layout_below="@id/horizontalBottomBar"
+            android:textColor="@color/white"
+            android:background="@color/dark_gray"
+            android:text="@string/prompt"
+            android:visibility="gone"/>
+
+    </RelativeLayout>
 
 
 

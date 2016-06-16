@@ -4,6 +4,7 @@
     <string name="navigation_drawer_open">Open navigation drawer</string>
     <string name="navigation_drawer_close">Close navigation drawer</string>
 
+    <string name="prompt">Armar: What can I do for you?</string>
     <string name="action_settings">Settings</string>
     <string name="kws_status">Say \'okay robot\' or click on the button below to start the conversation.</string>
 </resources>

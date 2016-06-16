@@ -19,6 +19,7 @@
         android:layout_height="wrap_content"
         android:textSize="18dp"
         android:text="Welcome to ArmarXSpeech!" />
+
     <TextView
         android:id="@+id/status"
         android:layout_width="wrap_content"
@@ -26,4 +27,5 @@
         android:layout_marginTop="10dp"
         android:layout_below="@id/caption"
         android:text="Say 'okay robot' or click on the button below to start the conversation." />
+
 </RelativeLayout>

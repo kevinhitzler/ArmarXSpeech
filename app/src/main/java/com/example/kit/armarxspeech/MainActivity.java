@@ -3,10 +3,7 @@ package com.example.kit.armarxspeech;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
-import android.media.AudioManager;
 import android.media.MediaPlayer;
-import android.media.Ringtone;
-import android.nfc.Tag;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
@@ -26,6 +23,8 @@ import android.view.MenuItem;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import org.w3c.dom.Text;
 
 import java.io.File;
 import java.io.IOException;
@@ -57,7 +56,7 @@ public class MainActivity extends AppCompatActivity
     private HashMap<String, Integer> captions;
 
     private MediaPlayer m_notify;
-    private Snackbar s_notify;
+    private TextView s_notify;
     private boolean isListening = false;
     FloatingActionButton fab;
 
@@ -84,7 +83,6 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onClick(View v)
             {
-                Log.d("ArmarXSpeech", "on click activated...");
                 if(isListening)
                 {
                     stopListenX();
@@ -113,16 +111,6 @@ public class MainActivity extends AppCompatActivity
         // Prepare the data for UI
         captions = new HashMap<String, Integer>();
         captions.put(KWS_SEARCH, R.string.kws_status);
-
-        // set up listener
-        // Check if user has given permission to record audio
-        int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);
-        if (permissionCheck == PackageManager.PERMISSION_DENIED)
-        {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSIONS_REQUEST_RECORD_AUDIO);
-            return;
-        }
-        runRecognizerSetup();
     }
 
     private void runRecognizerSetup()
@@ -187,7 +175,8 @@ public class MainActivity extends AppCompatActivity
     {
         super.onDestroy();
 
-        if (recognizer != null) {
+        if (recognizer != null)
+        {
             recognizer.cancel();
             recognizer.shutdown();
         }
@@ -203,7 +192,7 @@ public class MainActivity extends AppCompatActivity
                 .setDictionary(new File(assetsDir, "cmudict-en-us.dict"))
 
                 .setRawLogDir(assetsDir) // To disable logging of raw audio comment out this call (takes a lot of space on the device)
-                .setKeywordThreshold(1e-37f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
+                .setKeywordThreshold(1e-35f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
                 .setBoolean("-allphone_ci", true)  // Use context-independent phonetic search, context-dependent is too slow for mobile
 
 
@@ -218,14 +207,11 @@ public class MainActivity extends AppCompatActivity
     {
         recognizer.stop();
 
-        // If we are not spotting, start listening with timeout (10000 ms or 10 seconds).
+        // If we are spotting
         if (searchName.equals(KWS_SEARCH))
         {
             recognizer.startListening(searchName);
         }
-
-        String caption = getResources().getString(captions.get(searchName));
-        ((TextView) findViewById(R.id.status)).setText(caption);
     }
 
     private void startListenX()
@@ -259,11 +245,9 @@ public class MainActivity extends AppCompatActivity
         // show snackbar
         if(s_notify == null)
         {
-            FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-            s_notify = Snackbar.make(fab, "Armar: What can I do for you?", Snackbar.LENGTH_INDEFINITE)
-                    .setAction("Action", null);
+            s_notify = (TextView) findViewById(R.id.prompt);
         }
-        s_notify.show();
+        s_notify.setVisibility(View.VISIBLE);
     }
 
     private void stopListenX()
@@ -273,8 +257,15 @@ public class MainActivity extends AppCompatActivity
         fab.setBackgroundTintList(colorStateList);
 
         // pause and hide
-        m_notify.pause();
-        s_notify.dismiss();
+        if(m_notify != null)
+        {
+            m_notify.pause();
+        }
+        if(s_notify != null)
+        {
+            s_notify.setVisibility(View.GONE);
+        }
+
         isListening = false;
 
         // change status
@@ -351,7 +342,6 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onEndOfSpeech()
     {
-        Log.d(TAG, "onEndOfSpeech");
         switchSearch(KWS_SEARCH);
     }
 
@@ -371,13 +361,7 @@ public class MainActivity extends AppCompatActivity
         String text = hypothesis.getHypstr();
         if (text.equals(KEYPHRASE))
         {
-
             recognizer.stop();
-
-        }
-        else
-        {
-            Log.d(TAG, "Recognized WONG WORD: "+ text);
         }
     }
 
@@ -407,4 +391,37 @@ public class MainActivity extends AppCompatActivity
     {
         switchSearch(KWS_SEARCH);
     }
+
+    @Override
+    protected void onResume()
+    {
+        super.onResume();
+
+        // set up listener
+        // Check if user has given permission to record audio
+        int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);
+        if (permissionCheck == PackageManager.PERMISSION_DENIED)
+        {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSIONS_REQUEST_RECORD_AUDIO);
+            return;
+        }
+        runRecognizerSetup();
+    }
+
+    @Override
+    protected void onPause()
+    {
+        super.onPause();
+
+        stopListenX();
+        if(recognizer != null)
+        {
+            if (recognizer != null)
+            {
+                recognizer.cancel();
+                recognizer.shutdown();
+            }
+        }
+    }
+
 }
