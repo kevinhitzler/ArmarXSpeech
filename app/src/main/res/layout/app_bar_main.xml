@@ -9,6 +9,7 @@
     android:focusableInTouchMode="true"
     tools:context="com.example.kit.armarxspeech.MainActivity">
 
+
     <android.support.design.widget.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -21,10 +22,58 @@
             android:background="?attr/colorPrimary"
             app:popupTheme="@style/AppTheme.PopupOverlay" />
 
+        <LinearLayout
+            android:id="@+id/warning_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@color/red"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/warning_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="@dimen/warning_text_padding"
+                android:textColor="@color/white"
+                android:text="@string/warning_muted" />
+
+            <TextView
+                android:id="@+id/warning_action"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:padding="@dimen/warning_text_padding"
+                android:textColor="@color/white"
+                android:text="@string/action_undo"
+                android:gravity="right"
+                android:onClick="onClick"
+                android:clickable="true"/>
+
+        </LinearLayout>
+
+
     </android.support.design.widget.AppBarLayout>
 
-    <include layout="@layout/content_main" />
+    <!--
+    <LinearLayout
+        android:id="@+id/warning_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_gravity="top"
+        android:background="@color/red"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <TextView
+            android:id="@+id/warning_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="@dimen/warning_text_padding"
+            android:textColor="@color/white"
+            android:text="@string/warning_muted" />
+    </LinearLayout>-->
+
+    <include layout="@layout/content_main" />
 
     <RelativeLayout
         android:layout_width="match_parent"
@@ -34,8 +83,8 @@
         <LinearLayout
             android:id="@+id/horizontalBottomBar"
             android:layout_width="match_parent"
-            android:orientation="horizontal"
             android:layout_height="wrap_content"
+            android:orientation="horizontal"
             android:layout_gravity="bottom">
 
             <EditText
@@ -66,7 +115,7 @@
             android:layout_below="@id/horizontalBottomBar"
             android:textColor="@color/white"
             android:background="@color/dark_gray"
-            android:text="@string/prompt"
+            android:text="@string/prompt_text"
             android:visibility="gone"/>
 
     </RelativeLayout>

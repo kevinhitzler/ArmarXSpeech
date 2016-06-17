@@ -20,6 +20,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -52,13 +53,17 @@ public class MainActivity extends AppCompatActivity
     // Used to handle permission request
     private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 
+    private boolean isListening = false;
+    private boolean isMuted = false;
+
     private SpeechRecognizer recognizer;
     private HashMap<String, Integer> captions;
-
     private MediaPlayer m_notify;
     private TextView s_notify;
-    private boolean isListening = false;
-    FloatingActionButton fab;
+    private FloatingActionButton fab;
+    private LinearLayout warning_bar;
+    private TextView warning_action;
+    private Menu options_menu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -87,7 +92,6 @@ public class MainActivity extends AppCompatActivity
                 {
                     stopListenX();
                 }
-
             }
         });
 
@@ -104,6 +108,26 @@ public class MainActivity extends AppCompatActivity
                 else
                 {
                     startListenX();
+                }
+            }
+        });
+
+        warning_bar = (LinearLayout) findViewById(R.id.warning_bar);
+        warning_action = (TextView) findViewById(R.id.warning_action);
+        warning_action.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
+            public void onClick(View v)
+            {
+                // stop muting
+                isMuted = false;
+                warning_bar.setVisibility(View.GONE);
+                MenuItem action_mute = (MenuItem) options_menu.findItem(R.id.action_mute);
+                action_mute.setChecked(false);
+
+                if(recognizer != null)
+                {
+                    switchSearch(KWS_SEARCH);
                 }
             }
         });
@@ -207,10 +231,13 @@ public class MainActivity extends AppCompatActivity
     {
         recognizer.stop();
 
-        // If we are spotting
-        if (searchName.equals(KWS_SEARCH))
+        if(!isMuted)
         {
-            recognizer.startListening(searchName);
+            // If we are spotting
+            if (searchName.equals(KWS_SEARCH))
+            {
+                recognizer.startListening(searchName);
+            }
         }
     }
 
@@ -254,7 +281,10 @@ public class MainActivity extends AppCompatActivity
     {
         //change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
-        fab.setBackgroundTintList(colorStateList);
+        if(fab != null)
+        {
+            fab.setBackgroundTintList(colorStateList);
+        }
 
         // pause and hide
         if(m_notify != null)
@@ -266,21 +296,27 @@ public class MainActivity extends AppCompatActivity
             s_notify.setVisibility(View.GONE);
         }
 
-        isListening = false;
-
         // change status
         String caption = getResources().getString(captions.get(KWS_SEARCH));
         ((TextView) findViewById(R.id.status)).setText(caption);
+        if(recognizer != null)
+        {
+            switchSearch(KWS_SEARCH);
+        }
 
-        recognizer.startListening(KWS_SEARCH); //this one might be false
+        isListening = false;
     }
 
     @Override
-    public void onBackPressed() {
+    public void onBackPressed()
+    {
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        if (drawer.isDrawerOpen(GravityCompat.START)) {
+        if (drawer.isDrawerOpen(GravityCompat.START))
+        {
             drawer.closeDrawer(GravityCompat.START);
-        } else {
+        }
+        else
+        {
             super.onBackPressed();
         }
     }
@@ -288,19 +324,51 @@ public class MainActivity extends AppCompatActivity
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
+        this.options_menu = menu;
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if (id == R.id.action_settings)
+        {
+            return true;
+        }
+        else if(id == R.id.action_mute)
+        {
+            if(item.isChecked())
+            {
+                // stop muting
+                isMuted = false;
+                warning_bar.setVisibility(View.GONE);
+                item.setChecked(false);
+
+                if(recognizer != null)
+                {
+                    switchSearch(KWS_SEARCH);
+                }
+            }
+            else
+            {
+                // start muting
+                isMuted = true;
+                warning_bar.setVisibility(View.VISIBLE);
+                item.setChecked(true);
+                if(recognizer != null)
+                {
+                    recognizer.stop();
+                    recognizer.cancel();
+                }
+            }
+
             return true;
         }
 
@@ -375,7 +443,6 @@ public class MainActivity extends AppCompatActivity
         {
             String text = hypothesis.getHypstr();
             Log.d(TAG, "Recognized Keyphrase: "+ KEYPHRASE);
-            makeText(getApplicationContext(), text, Toast.LENGTH_SHORT).show();
             startListenX();
         }
     }
@@ -396,7 +463,11 @@ public class MainActivity extends AppCompatActivity
     protected void onResume()
     {
         super.onResume();
+        startRecognitionService();
+    }
 
+    private void startRecognitionService()
+    {
         // set up listener
         // Check if user has given permission to record audio
         int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);

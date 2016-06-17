@@ -9,6 +9,7 @@
     <dimen name="fab_margin">16dp</dimen>
 
     <dimen name="prompt_padding">16dp</dimen>
+    <dimen name="warning_text_padding">6dp</dimen>
 
     <dimen name="cmd_margin_top">26dp</dimen>
     <dimen name="cmd_margin_left">16dp</dimen>
