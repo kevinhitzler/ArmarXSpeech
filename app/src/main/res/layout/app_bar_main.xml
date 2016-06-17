@@ -54,25 +54,6 @@
 
     </android.support.design.widget.AppBarLayout>
 
-    <!--
-    <LinearLayout
-        android:id="@+id/warning_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_gravity="top"
-        android:background="@color/red"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
-
-        <TextView
-            android:id="@+id/warning_text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="@dimen/warning_text_padding"
-            android:textColor="@color/white"
-            android:text="@string/warning_muted" />
-    </LinearLayout>-->
-
     <include layout="@layout/content_main" />
 
     <RelativeLayout
@@ -95,16 +76,26 @@
                 android:layout_marginLeft="@dimen/cmd_margin_left"
                 android:layout_marginTop="@dimen/cmd_margin_top"
                 android:textAppearance="?android:attr/textAppearanceMedium"
+                android:singleLine="true"
                 android:hint="Or type your robot command." />
 
+            <android.support.design.widget.FloatingActionButton
+                android:id="@+id/fab_micro"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/fab_margin"
+                android:tint="@color/white"
+                android:src="@android:drawable/ic_btn_speak_now" />
 
-                <android.support.design.widget.FloatingActionButton
-                    android:id="@+id/fab"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_margin="@dimen/fab_margin"
-                    android:tint="@color/white"
-                    android:src="@android:drawable/ic_btn_speak_now" />
+            <android.support.design.widget.FloatingActionButton
+                android:id="@+id/fab_send"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/fab_margin"
+                android:tint="@color/white"
+                android:src="@android:drawable/ic_menu_send"
+                android:visibility="gone"/>
+
         </LinearLayout>
 
         <TextView

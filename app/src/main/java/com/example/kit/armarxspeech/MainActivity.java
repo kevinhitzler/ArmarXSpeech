@@ -7,9 +7,10 @@ import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
 import android.support.design.widget.NavigationView;
@@ -20,12 +21,11 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import org.w3c.dom.Text;
 
 import java.io.File;
 import java.io.IOException;
@@ -53,17 +53,18 @@ public class MainActivity extends AppCompatActivity
     // Used to handle permission request
     private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 
-    private boolean isListening = false;
-    private boolean isMuted = false;
+    private static boolean isListening = false;
+    private static boolean isMuted = false;
 
     private SpeechRecognizer recognizer;
     private HashMap<String, Integer> captions;
     private MediaPlayer m_notify;
     private TextView s_notify;
-    private FloatingActionButton fab;
+    private FloatingActionButton fab_micro, fab_send;
     private LinearLayout warning_bar;
     private TextView warning_action;
     private Menu options_menu;
+    private EditText cmd;
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -95,8 +96,8 @@ public class MainActivity extends AppCompatActivity
             }
         });
 
-        fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener()
+        fab_micro = (FloatingActionButton) findViewById(R.id.fab_micro);
+        fab_micro.setOnClickListener(new View.OnClickListener()
         {
             @Override
             public void onClick(View view)
@@ -109,6 +110,43 @@ public class MainActivity extends AppCompatActivity
                 {
                     startListenX();
                 }
+            }
+        });
+
+        fab_send = (FloatingActionButton) findViewById(R.id.fab_send);
+        fab_send.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
+            public void onClick(View view)
+            {
+                ((EditText) findViewById(R.id.cmd)).setText("");
+                Toast.makeText(getApplicationContext(), "No server found.", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        cmd = (EditText) findViewById(R.id.cmd);
+        cmd.addTextChangedListener(new TextWatcher()
+        {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count)
+            {
+                if(s.toString().length() <= 0)
+                {
+                    toggleFAB(fab_micro);
+                }
+                else if (s.toString().length() > 0)
+                {
+                    toggleFAB(fab_send);
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
             }
         });
 
@@ -125,16 +163,28 @@ public class MainActivity extends AppCompatActivity
                 MenuItem action_mute = (MenuItem) options_menu.findItem(R.id.action_mute);
                 action_mute.setChecked(false);
 
-                if(recognizer != null)
-                {
-                    switchSearch(KWS_SEARCH);
-                }
+                Log.d(TAG, "warning_action.onClick calls switchSearch");
+                switchSearch(KWS_SEARCH);
             }
         });
 
         // Prepare the data for UI
         captions = new HashMap<String, Integer>();
         captions.put(KWS_SEARCH, R.string.kws_status);
+    }
+
+    private void toggleFAB(FloatingActionButton fab)
+    {
+        if(fab.equals(fab_micro))
+        {
+            fab_send.setVisibility(View.GONE);
+            fab_micro.setVisibility(View.VISIBLE);
+        }
+        else
+        {
+            fab_micro.setVisibility(View.GONE);
+            fab_send.setVisibility(View.VISIBLE);
+        }
     }
 
     private void runRecognizerSetup()
@@ -169,6 +219,7 @@ public class MainActivity extends AppCompatActivity
                 }
                 else
                 {
+                    Log.d(TAG, "onPostExecute() calls switchSearch");
                     switchSearch(KWS_SEARCH);
                 }
             }
@@ -229,14 +280,16 @@ public class MainActivity extends AppCompatActivity
 
     private void switchSearch(String searchName)
     {
-        recognizer.stop();
-
-        if(!isMuted)
+        if(recognizer != null)
         {
-            // If we are spotting
-            if (searchName.equals(KWS_SEARCH))
-            {
-                recognizer.startListening(searchName);
+            recognizer.stop();
+
+            if (!isMuted) {
+                // If we are spotting
+                if (searchName.equals(KWS_SEARCH))
+                {
+                    recognizer.startListening(searchName);
+                }
             }
         }
     }
@@ -250,7 +303,7 @@ public class MainActivity extends AppCompatActivity
 
         // change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
-        fab.setBackgroundTintList(colorStateList);
+        fab_micro.setBackgroundTintList(colorStateList);
 
         // play sound
         if(m_notify == null)
@@ -281,9 +334,9 @@ public class MainActivity extends AppCompatActivity
     {
         //change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
-        if(fab != null)
+        if(fab_micro != null)
         {
-            fab.setBackgroundTintList(colorStateList);
+            fab_micro.setBackgroundTintList(colorStateList);
         }
 
         // pause and hide
@@ -299,10 +352,9 @@ public class MainActivity extends AppCompatActivity
         // change status
         String caption = getResources().getString(captions.get(KWS_SEARCH));
         ((TextView) findViewById(R.id.status)).setText(caption);
-        if(recognizer != null)
-        {
-            switchSearch(KWS_SEARCH);
-        }
+
+        Log.d(TAG, "stopListenX() calls switchSearch");
+        switchSearch(KWS_SEARCH);
 
         isListening = false;
     }
@@ -340,6 +392,8 @@ public class MainActivity extends AppCompatActivity
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings)
         {
+            //display in short period of time
+            Toast.makeText(getApplicationContext(), "No settings available.", Toast.LENGTH_SHORT).show();
             return true;
         }
         else if(id == R.id.action_mute)
@@ -351,10 +405,8 @@ public class MainActivity extends AppCompatActivity
                 warning_bar.setVisibility(View.GONE);
                 item.setChecked(false);
 
-                if(recognizer != null)
-                {
-                    switchSearch(KWS_SEARCH);
-                }
+                Log.d(TAG, "onOptionsItemSelected() calls switchSearch");
+                switchSearch(KWS_SEARCH);
             }
             else
             {
@@ -410,6 +462,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onEndOfSpeech()
     {
+        Log.d(TAG, "onEndOfSpeecht() calls switchSearch");
         switchSearch(KWS_SEARCH);
     }
 
@@ -427,7 +480,7 @@ public class MainActivity extends AppCompatActivity
         }
 
         String text = hypothesis.getHypstr();
-        if (text.equals(KEYPHRASE))
+        if (text.equals(KEYPHRASE) && recognizer != null)
         {
             recognizer.stop();
         }
@@ -456,6 +509,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onTimeout()
     {
+        Log.d(TAG, "onTimeout() calls switchSearch");
         switchSearch(KWS_SEARCH);
     }
 
@@ -485,13 +539,10 @@ public class MainActivity extends AppCompatActivity
         super.onPause();
 
         stopListenX();
-        if(recognizer != null)
+        if (recognizer != null)
         {
-            if (recognizer != null)
-            {
-                recognizer.cancel();
-                recognizer.shutdown();
-            }
+            recognizer.cancel();
+            recognizer.shutdown();
         }
     }
 
