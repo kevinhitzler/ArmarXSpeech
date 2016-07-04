@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/ArmarXSpeech.iml" filepath="$PROJECT_DIR$/ArmarXSpeech.iml" />
+      <module fileurl="file://$PROJECT_DIR$/ArmarXSpeech_Slice.iml" filepath="$PROJECT_DIR$/ArmarXSpeech_Slice.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
     </modules>
   </component>

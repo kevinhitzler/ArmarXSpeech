@@ -119,8 +119,12 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onClick(View view)
             {
+                //send msg to server
+                EditText cmd = ((EditText) findViewById(R.id.cmd));
+                Client.send(cmd.getText().toString());
+
+                //reset text
                 ((EditText) findViewById(R.id.cmd)).setText("");
-                Toast.makeText(getApplicationContext(), "No server found.", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -267,7 +271,7 @@ public class MainActivity extends AppCompatActivity
                 .setDictionary(new File(assetsDir, "cmudict-en-us.dict"))
 
                 .setRawLogDir(assetsDir) // To disable logging of raw audio comment out this call (takes a lot of space on the device)
-                .setKeywordThreshold(1e-35f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
+                .setKeywordThreshold(1e-39f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
                 .setBoolean("-allphone_ci", true)  // Use context-independent phonetic search, context-dependent is too slow for mobile
 
 
