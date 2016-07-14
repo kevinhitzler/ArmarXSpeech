@@ -29,12 +29,14 @@ class PrinterThread implements Runnable
             initData = new Ice.InitializationData();
             ic = Ice.Util.initialize(initData);
 
-            Ice.ObjectPrx base = ic.stringToProxy("SimplePrinter:tcp -h 192.168.0.19 -p 9999");
-            Demo.PrinterPrx printer = Demo.PrinterPrxHelper.checkedCast(base);
-            if (printer == null)
+            Ice.ObjectPrx base = ic.stringToProxy("SimplePrinter:tcp -h 192.168.1.163 -p 9999");
+            //Demo.PrinterPrx printer = Demo.PrinterPrxHelper.checkedCast(base);
+            armarx.TextListenerInterfacePrx textListener = armarx.TextListenerInterfacePrxHelper.checkedCast(base);
+            if (textListener == null)
                 throw new Error("Invalid proxy");
 
-            printer.printString(this.msg);
+            //printer.printString(this.msg);
+            textListener.reportText(this.msg);
 
         }
         catch(Ice.LocalException e)

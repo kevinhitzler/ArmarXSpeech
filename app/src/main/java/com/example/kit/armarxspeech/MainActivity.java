@@ -4,8 +4,10 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.media.MediaPlayer;
+import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -57,8 +59,10 @@ public class MainActivity extends AppCompatActivity
     private static boolean isMuted = false;
 
     private SpeechRecognizer recognizer;
+    private ArmarXRecorder xRecorder;
     private HashMap<String, Integer> captions;
     private MediaPlayer m_notify;
+    private static String mFileName = null;
     private TextView s_notify;
     private FloatingActionButton fab_micro, fab_send;
     private LinearLayout warning_bar;
@@ -175,6 +179,9 @@ public class MainActivity extends AppCompatActivity
         // Prepare the data for UI
         captions = new HashMap<String, Integer>();
         captions.put(KWS_SEARCH, R.string.kws_status);
+
+        // Prepare recorder
+        xRecorder = new ArmarXRecorder();
     }
 
     private void toggleFAB(FloatingActionButton fab)
@@ -271,7 +278,7 @@ public class MainActivity extends AppCompatActivity
                 .setDictionary(new File(assetsDir, "cmudict-en-us.dict"))
 
                 .setRawLogDir(assetsDir) // To disable logging of raw audio comment out this call (takes a lot of space on the device)
-                .setKeywordThreshold(1e-39f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
+                .setKeywordThreshold(1e-42f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
                 .setBoolean("-allphone_ci", true)  // Use context-independent phonetic search, context-dependent is too slow for mobile
 
 
@@ -300,7 +307,10 @@ public class MainActivity extends AppCompatActivity
 
     private void startListenX()
     {
+        //stop recognizer
         isListening = true;
+        recognizer.stop();
+        recognizer.cancel();
 
         // change status
         ((TextView) findViewById(R.id.status)).setText("Armar is listening...");
@@ -332,10 +342,16 @@ public class MainActivity extends AppCompatActivity
             s_notify = (TextView) findViewById(R.id.prompt);
         }
         s_notify.setVisibility(View.VISIBLE);
+
+        // recorder
+        xRecorder.startRecording();
     }
 
     private void stopListenX()
     {
+        // stop recording
+        xRecorder.stopRecording();
+
         //change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
         if(fab_micro != null)

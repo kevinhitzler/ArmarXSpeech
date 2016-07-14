@@ -19,6 +19,10 @@ allprojects {
     }
 }
 
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
 //IceGrid
 buildscript {
     repositories {
@@ -48,8 +52,4 @@ repositories {
 }
 dependencies {
     compile 'com.zeroc:ice:3.6.0'
-}
-
-task clean(type: Delete) {
-    delete rootProject.buildDir
 }
