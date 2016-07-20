@@ -16,6 +16,8 @@ import android.media.MediaPlayer;
 import java.io.File;
 import java.io.IOException;
 
+import armarx.AudioEncoding;
+
 
 /**
  * Created by Kevin on 14.07.2016.
@@ -106,5 +108,8 @@ public class ArmarXRecorder
         }
     }
 
-
+    public String getFileName()
+    {
+        return mFileName;
+    }
 }

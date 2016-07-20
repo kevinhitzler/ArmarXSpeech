@@ -29,10 +29,15 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 
+import armarx.AudioEncoding;
+import armarx.AudioStreamProducerInterfacePrx;
 import edu.cmu.pocketsphinx.Assets;
 import edu.cmu.pocketsphinx.Hypothesis;
 import edu.cmu.pocketsphinx.RecognitionListener;
@@ -59,7 +64,8 @@ public class MainActivity extends AppCompatActivity
     private static boolean isMuted = false;
 
     private SpeechRecognizer recognizer;
-    private ArmarXRecorder xRecorder;
+    //private ArmarXRecorder xRecorder;
+    private WaveRecorder waveRecorder;
     private HashMap<String, Integer> captions;
     private MediaPlayer m_notify;
     private static String mFileName = null;
@@ -181,7 +187,8 @@ public class MainActivity extends AppCompatActivity
         captions.put(KWS_SEARCH, R.string.kws_status);
 
         // Prepare recorder
-        xRecorder = new ArmarXRecorder();
+        //xRecorder = new ArmarXRecorder();
+        waveRecorder = new WaveRecorder();
     }
 
     private void toggleFAB(FloatingActionButton fab)
@@ -330,6 +337,15 @@ public class MainActivity extends AppCompatActivity
                     mp.start();
                 }
             });
+            m_notify.setOnCompletionListener(new MediaPlayer.OnCompletionListener()
+            {
+                @Override
+                public void onCompletion(MediaPlayer mp)
+                {
+                    // start recording
+                    waveRecorder.startRecording();
+                }
+            });
         }
         else
         {
@@ -342,15 +358,38 @@ public class MainActivity extends AppCompatActivity
             s_notify = (TextView) findViewById(R.id.prompt);
         }
         s_notify.setVisibility(View.VISIBLE);
-
-        // recorder
-        xRecorder.startRecording();
     }
 
     private void stopListenX()
     {
+        stopListenX(true);
+    }
+
+    private void stopListenX(boolean streamFile)
+    {
         // stop recording
-        xRecorder.stopRecording();
+        waveRecorder.stopRecording();
+
+        //send chunks
+        if (streamFile) {
+            File file = new File(waveRecorder.getFilename());
+            int size = (int) file.length();
+            byte[] bytes = new byte[size];
+            try {
+                BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
+                buf.read(bytes, 0, bytes.length);
+                buf.close();
+
+                //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
+                Client.streamFile(waveRecorder.getFilename(), AudioEncoding.PCM, System.currentTimeMillis());
+            } catch (FileNotFoundException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
 
         //change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
@@ -558,7 +597,7 @@ public class MainActivity extends AppCompatActivity
     {
         super.onPause();
 
-        stopListenX();
+        stopListenX(false);
         if (recognizer != null)
         {
             recognizer.cancel();

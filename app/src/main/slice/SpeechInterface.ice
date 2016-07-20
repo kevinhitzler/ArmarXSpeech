@@ -52,6 +52,11 @@ module armarx
         void publishAudioChunk(AudioChunk data, AudioEncoding encoding, long timestamp);
     };
 
+    interface AsyncStreamingInterface
+    {
+        void sendChunkAsync(int offset, AudioChunk data, AudioEncoding encoding, long timestamp);
+    };
+
     /*!
      * \brief Interface implemented by components that use an audio stream (e.g. for running an ASR system).
      */
