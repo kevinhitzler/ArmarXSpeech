@@ -52,7 +52,7 @@ public class MainActivity extends AppCompatActivity
     private static final String KWS_SEARCH = "wakeup";
 
     // used to activate armar speech recognition
-    private static final String KEYPHRASE = "okay robot";
+    private static final String KEYPHRASE = "OK ARMAR FOUR";
 
     // Used to handle permission request
     private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
@@ -63,7 +63,7 @@ public class MainActivity extends AppCompatActivity
 
     private SpeechRecognizer recognizer;
     private long lastTime = 0;
-    //private WaveRecorder waveRecorder;
+    private WaveRecorder waveRecorder;
     private HashMap<String, Integer> captions;
     private MediaPlayer m_notify;
     private static String mFileName = null;
@@ -197,7 +197,7 @@ public class MainActivity extends AppCompatActivity
                 action_mute.setChecked(false);
 
                 Log.d(TAG, "warning_action.onClick calls switchSearch");
-                switchSearch(KWS_SEARCH);
+                runRecognizerSetup();
             }
         });
 
@@ -206,15 +206,7 @@ public class MainActivity extends AppCompatActivity
         captions.put(KWS_SEARCH, R.string.kws_status);
 
         // Prepare recorder
-        //waveRecorder = new WaveRecorder();
-
-        // Check if user has given permission to record audio
-        int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);
-        if (permissionCheck == PackageManager.PERMISSION_DENIED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSIONS_REQUEST_RECORD_AUDIO);
-            return;
-        }
-        runRecognizerSetup();
+        waveRecorder = new WaveRecorder();
     }
 
     private void toggleFAB(FloatingActionButton fab)
@@ -316,17 +308,17 @@ public class MainActivity extends AppCompatActivity
 
         recognizer = SpeechRecognizerSetup.defaultSetup()
                 .setAcousticModel(new File(assetsDir, "en-us-ptm"))
-                .setDictionary(new File(assetsDir, "cmudict-en-us.dict"))
+                .setDictionary(new File(assetsDir, "2000.dic"))
 
                 //.setRawLogDir(assetsDir) // To disable logging of raw audio comment out this call (takes a lot of space on the device)
-                .setKeywordThreshold(1e-42f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
+                .setKeywordThreshold(1e-45f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
                 .setBoolean("-allphone_ci", true)  // Use context-independent phonetic search, context-dependent is too slow for mobile
 
 
                 .getRecognizer();
         recognizer.addListener(this);
 
-        // Create keyword-activation search.
+        // Create keyword-activation search
         recognizer.addKeyphraseSearch(KWS_SEARCH, KEYPHRASE);
     }
 
@@ -357,7 +349,7 @@ public class MainActivity extends AppCompatActivity
         }
 
         // change status
-        ((TextView) findViewById(R.id.status)).setText("Armar is listening...");
+        ((TextView) findViewById(R.id.status)).setText(getResources().getString(R.string.listening));
 
         // change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
@@ -380,7 +372,7 @@ public class MainActivity extends AppCompatActivity
                 public void onCompletion(MediaPlayer mp)
                 {
                     // start recording
-                    //waveRecorder.startRecording();
+                    waveRecorder.startRecording();
                 }
             });
         }
@@ -400,29 +392,38 @@ public class MainActivity extends AppCompatActivity
     private void stopListenX(boolean streamFile, boolean startRecognizer)
     {
         // stop recording
-        //waveRecorder.stopRecording();
+        waveRecorder.stopRecording();
 
         //send chunks
-        /*
         if (streamFile) {
-            File file = new File(waveRecorder.getFilename());
-            int size = (int) file.length();
-            byte[] bytes = new byte[size];
-            try {
-                BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
-                buf.read(bytes, 0, bytes.length);
-                buf.close();
 
-                //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
-                Client.streamFile(getApplicationContext(), waveRecorder.getFilename(), AudioEncoding.PCM, System.currentTimeMillis());
-            } catch (FileNotFoundException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }*/
+            new AsyncTask<Void, Void, Exception>()
+            {
+                @Override
+                protected Exception doInBackground(Void... params)
+                {
+                    File file = new File(waveRecorder.getFilename());
+                    int size = (int) file.length();
+                    byte[] bytes = new byte[size];
+                    try {
+                        BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
+                        buf.read(bytes, 0, bytes.length);
+                        buf.close();
+
+                        //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
+                        Client.streamFile(getApplicationContext(), waveRecorder.getFilename(), AudioEncoding.PCM, System.currentTimeMillis());
+                    } catch (FileNotFoundException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    } catch (IOException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+
+                    return null;
+                }
+            }.execute();
+        }
 
         //change color
         ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
@@ -504,7 +505,7 @@ public class MainActivity extends AppCompatActivity
                 item.setChecked(false);
 
                 Log.d(TAG, "onOptionsItemSelected() calls switchSearch");
-                switchSearch(KWS_SEARCH);
+                runRecognizerSetup();
             }
             else
             {
@@ -517,7 +518,6 @@ public class MainActivity extends AppCompatActivity
                     recognizer.stop();
                     recognizer.cancel();
                     recognizer.shutdown();
-                    recognizer = null;
                 }
             }
 
@@ -610,7 +610,7 @@ public class MainActivity extends AppCompatActivity
     protected void onResume()
     {
         super.onResume();
-        //runRecognizerSetup();
+        runRecognizerSetup();
     }
 
     @Override

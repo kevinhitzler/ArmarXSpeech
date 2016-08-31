@@ -359,12 +359,12 @@ class TextListenerThread implements Runnable
 
             while (topic == null) {
                 try {
-                    topic = topicManager.retrieve("ArmarXSpeech");
+                    topic = topicManager.retrieve("ArmarXSpeechChat");
                 } catch (IceStorm.NoSuchTopic ex) {
                     try {
                         String err = (ex.getMessage()==null)?ex.toString():ex.getMessage();
                         Log.e("NoSuchTopic:",err);
-                        topic = topicManager.create("ArmarXSpeech");
+                        topic = topicManager.create("ArmarXSpeechChat");
                     } catch (IceStorm.TopicExists e) {
                         String err = (e.getMessage()==null)?e.toString():e.getMessage();
                         Log.e("TopicExists:",err);
@@ -372,9 +372,13 @@ class TextListenerThread implements Runnable
                 }
             }
 
+            /*
             Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
             MonitorPrx monitor = MonitorPrxHelper.uncheckedCast(pub);
-            monitor.report(msg);
+            monitor.report(msg);*/
+            Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
+            TextListenerInterfacePrx textListener = TextListenerInterfacePrxHelper.uncheckedCast(pub);
+            textListener.reportText(msg);
 
         }
         catch (Ice.LocalException e) {

@@ -8,5 +8,6 @@
     <string name="warning_muted">Speech activation service muted.</string>
     <string name="action_settings">Settings</string>
     <string name="action_undo"><u>UNDO</u></string>
-    <string name="kws_status">Say \'okay robot\' or click on the button below to start the conversation.</string>
+    <string name="kws_status">Say \'OK Armar IV\' or click on the button below to start the conversation.</string>
+    <string name="listening">"Armar IV is listening..."</string>
 </resources>
