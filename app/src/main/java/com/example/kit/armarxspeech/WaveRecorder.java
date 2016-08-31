@@ -11,15 +11,18 @@ import android.media.MediaRecorder;
 import android.os.Environment;
 import android.util.Log;
 
+import armarx.AudioEncoding;
+
 /**
  * Created by Kevin on 14.07.2016.
  */
 public class WaveRecorder {
 
+    private static final String TAG = "WaveRecorder";
     private static final int RECORDER_BPP = 16;
-    private static final String AUDIO_RECORDER_FILE_EXT_WAV = ".wav";
+    private static final String AUDIO_RECORDER_FILE = "record_tmp.wav";
     private static final String AUDIO_RECORDER_FOLDER = "AudioRecorder";
-    private static final String AUDIO_RECORDER_TEMP_FILE = "record_temp.raw";
+    private static final String AUDIO_RECORDER_TEMP_FILE = "record_tmp.raw";
     private static final int RECORDER_SAMPLERATE = 44100;
     private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_STEREO;
     private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
@@ -39,7 +42,8 @@ public class WaveRecorder {
         audioData = new short [bufferSize]; //short array that pcm data is put into.
     }
 
-    public String getFilename(){
+    public String getFilename()
+    {
         String filepath = Environment.getExternalStorageDirectory().getAbsolutePath()
                 + "/Android/data/com.example.kit.armarxspeech/files/wav/";
         File file = new File(filepath,AUDIO_RECORDER_FOLDER);
@@ -49,10 +53,10 @@ public class WaveRecorder {
         }
 
         return (file.getAbsolutePath() + "/" +
-                AUDIO_RECORDER_FILE_EXT_WAV);
+                AUDIO_RECORDER_FILE);
     }
 
-    private String getTempFilename() {
+    private String getTempFilenameAndDeleteOld() {
 
         String filepath = Environment.getExternalStorageDirectory().getAbsolutePath()
                 + "/Android/data/com.example.kit.armarxspeech/files/tmp/";
@@ -67,7 +71,10 @@ public class WaveRecorder {
         if (tempFile.exists())
             tempFile.delete();
 
-        return (file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE);
+        String path = file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE;
+        Log.i(TAG, "getTempFilenameAndDeleteOld(): "+path);
+
+        return path;
     }
 
     public void startRecording() {
@@ -85,6 +92,7 @@ public class WaveRecorder {
         recordingThread = new Thread(new Runnable() {
             @Override
             public void run() {
+                //streamAudioData();                        add this one here
                 writeAudioDataToFile();
             }
         }, "AudioRecorder Thread");
@@ -94,7 +102,8 @@ public class WaveRecorder {
 
     private void writeAudioDataToFile() {
         byte data[] = new byte[bufferSize];
-        String filename = getTempFilename();
+        String filename = getTempFilenameAndDeleteOld();
+
         FileOutputStream os = null;
 
         try {
@@ -108,7 +117,8 @@ public class WaveRecorder {
         if (null != os) {
             while(isRecording) {
                 read = recorder.read(data, 0, bufferSize);
-                if (read > 0){
+                if (read > 0)
+                {
                 }
 
                 if (AudioRecord.ERROR_INVALID_OPERATION != read) {
@@ -128,26 +138,29 @@ public class WaveRecorder {
         }
     }
 
-    public void stopRecording() {
-        if (null != recorder){
-            isRecording = false;
+    public boolean hasStopped()
+    {
+        if (recorder == null)
+            return true;
+        else
+            return false;
+    }
 
+    public void stopRecording()
+    {
+        if (recorder != null)
+        {
+            isRecording = false;
             int i = recorder.getState();
             if (i==1)
                 recorder.stop();
-            recorder.release();
 
+            recorder.release();
             recorder = null;
             recordingThread = null;
         }
 
-        copyWaveFile(getTempFilename(),getFilename());
-        deleteTempFile();
-    }
-
-    private void deleteTempFile() {
-        File file = new File(getTempFilename());
-        file.delete();
+        copyWaveFile(getTempFilenameAndDeleteOld(),getFilename());
     }
 
     private void copyWaveFile(String inFilename,String outFilename){

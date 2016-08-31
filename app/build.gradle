@@ -34,9 +34,9 @@ dependencies {
     testCompile 'junit:junit:4.12'
     compile 'com.android.support:appcompat-v7:23.4.0'
     compile 'com.android.support:design:23.4.0'
-    compile files('libs/pocketsphinx-android-5prealpha-nolib.jar')
     compile 'com.zeroc:ice:3.6.2'
     compile 'com.zeroc:glacier2:3.6.2'
     compile 'com.zeroc:freeze:3.6.2'
     compile 'com.zeroc:icegrid:3.6.2'
+    compile 'com.zeroc:icestorm:3.6.2'
 }
