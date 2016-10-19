@@ -54,7 +54,7 @@ module armarx
 
     interface AsyncStreamingInterface
     {
-        void sendChunkAsync(int offset, AudioChunk data, AudioEncoding encoding, long timestamp);
+        void sendChunkAsync(int offset, AudioChunk data, int minBufferSize, AudioEncoding encoding, long timestamp);
     };
 
     /*!

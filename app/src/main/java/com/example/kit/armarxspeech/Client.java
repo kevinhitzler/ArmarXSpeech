@@ -7,12 +7,14 @@ import android.util.Log;
 import android.widget.Toast;
 
 import java.io.BufferedInputStream;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.logging.FileHandler;
 
@@ -28,113 +30,46 @@ import demo.MonitorPrxHelper;
 public class Client
 {
     private static final String TAG = "Client";
-    public static String IP_ADDRESS_SERVER = "192.168.1.163";
-    public static String PORT_PRINTER_SERVER = "10001";
-    public static String PORT_AUDIO_SERVER = "10001";
+    public static String IP_ADDRESS_SERVER = "192.168.0.19";
+    public static String PORT_SERVER = "80";
 
-
-    /*public static void send(String msg) {
-        new Thread(new PrinterThread(msg)).run();
-    }*/
 
     public static void send(String msg) {
         new Thread(new TextListenerThread(msg)).run();
     }
 
-   /* public static void sendFile(byte[] chunk, AudioEncoding encoding, long timestamp) {
-        new Thread(new StreamThread(chunk, encoding, timestamp)).run();
+    public static void streamFile(Context applicationContext, String filepath, AudioEncoding encoding, long timestamp, int minBufferSize) {
+        new AsyncStreamThread(applicationContext, filepath, encoding, timestamp, minBufferSize).execute();
     }
-
-    public static void streamData(int offset, byte[] data, AudioEncoding encoding, long timestamp) {
-        new Thread(new StreamingThread(offset, data, encoding, timestamp)).run();
-    }
-
-    */
-
-    public static void streamFile(Context applicationContext, String filepath, AudioEncoding encoding, long timestamp) {
-        new AsyncStreamThread(applicationContext, filepath, encoding, timestamp).execute();
-    }
-
-
 }
-
-/*
-class StreamingThread implements Runnable
-{
-    int offset;
-    byte[] data;
-    AudioEncoding encoding;
-    long timestamp;
-
-    public StreamingThread(int offset, byte[] data, AudioEncoding encoding, long timestamp)
-    {
-        this.offset = offset;
-        this.data = (byte[])data;
-        this.encoding = (AudioEncoding) encoding;
-        this.timestamp = (long)timestamp;
-    }
-
-    public void run()
-    {
-        Ice.InitializationData initData = null;
-        Ice.Communicator ic = null;
-
-        try
-        {
-            initData = new Ice.InitializationData();
-            ic = Ice.Util.initialize(initData);
-
-            Ice.ObjectPrx base = ic.stringToProxy("SimpleStreamer:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_AUDIO_SERVER);
-            armarx.AsyncStreamingInterfacePrx audioStreamPrx = armarx.AsyncStreamingInterfacePrxHelper.checkedCast(base);
-            if (audioStreamPrx == null)
-                throw new Error("Invalid proxy");
-            audioStreamPrx.sendChunkAsync(offset, data, AudioEncoding.PCM, timestamp);
-        }
-        catch(Ice.LocalException e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-        }
-        catch (Exception e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-        }
-
-        if (ic != null)
-        {
-            // Clean up
-            try
-            {
-                ic.destroy();
-            }
-            catch (Exception e)
-            {
-                Log.e("ArmarXSpeech", e.toString());
-            }
-        }
-    }
-}*/
-
 
 class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
     String filepath;
     AudioEncoding encoding;
     long timestamp;
     Context applicationContext;
+    int minBufferSize;
 
-    public AsyncStreamThread(Context applicationContext, String filepath, AudioEncoding encoding, long timestamp)
+    public AsyncStreamThread(Context applicationContext, String filepath, AudioEncoding encoding, long timestamp, int minBufferSize)
     {
         this.filepath = (String)filepath;
         this.encoding = (AudioEncoding) encoding;
         this.timestamp = (long)timestamp;
         this.applicationContext = (Context) applicationContext;
+        this.minBufferSize = minBufferSize;
     }
 
     private byte[] streamPartialFile(armarx.AsyncStreamingInterfacePrx stream)
     {
+        File file = null;
+        FileInputStream fis = null;
+        BufferedInputStream bis = null;
+        DataInputStream dis = null;
         try
         {
-            File file = new File(filepath);
-            FileInputStream fis = new FileInputStream(file);
+
+            file = new File(filepath);
+            fis = new FileInputStream(file);
 
             final int chunkSize = 1024*512;
             byte[] byteSeq = new byte[chunkSize];
@@ -149,7 +84,7 @@ class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
                 offset = fis.read(byteSeq);
 
                 // Send up to numRequests + 1 chunks asynchronously.
-                Ice.AsyncResult r = stream.begin_sendChunkAsync(offset, byteSeq, AudioEncoding.PCM, System.currentTimeMillis());
+                Ice.AsyncResult r = stream.begin_sendChunkAsync(offset, byteSeq, minBufferSize, AudioEncoding.PCM, System.currentTimeMillis());
 
                 // Wait until this request has been passed to the transport.
                 r.waitForSent();
@@ -181,6 +116,15 @@ class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
         {
             Log.d("ClientIO", e.getMessage());
         }
+        finally {
+            try {
+                fis.close();
+                bis.close();
+                dis.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
 
         return null;
     }
@@ -196,7 +140,7 @@ class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
             initData = new Ice.InitializationData();
             ic = Ice.Util.initialize(initData);
 
-            Ice.ObjectPrx obj = ic.stringToProxy("IceStorm/TopicManager:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_AUDIO_SERVER);
+            Ice.ObjectPrx obj = ic.stringToProxy("IceStorm/TopicManager:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_SERVER);
             IceStorm.TopicManagerPrx topicManager = IceStorm.TopicManagerPrxHelper.checkedCast(obj.ice_timeout(1000));
 
             if(topicManager == null)
@@ -221,7 +165,6 @@ class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
                     }
                 }
             }
-
 
 
             Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
@@ -278,60 +221,6 @@ class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
         }
     }
 }
-/*
-class StreamThread implements Runnable
-{
-    byte[] data;
-    AudioEncoding encoding;
-    long timestamp;
-
-    public StreamThread(byte[] chunk, AudioEncoding encoding, long timestamp)
-    {
-        this.data = (byte[])chunk;
-        this.encoding = (AudioEncoding) encoding;
-        this.timestamp = (long)timestamp;
-    }
-
-    public void run()
-    {
-        Ice.InitializationData initData = null;
-        Ice.Communicator ic = null;
-
-        try
-        {
-            initData = new Ice.InitializationData();
-            ic = Ice.Util.initialize(initData);
-
-            Ice.ObjectPrx base = ic.stringToProxy("SimpleStreamer:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_AUDIO_SERVER);;
-            armarx.AsyncStreamingInterfacePrx audioStreamPrx = armarx.AsyncStreamingInterfacePrxHelper.checkedCast(base);
-            if (audioStreamPrx == null)
-                throw new Error("Invalid proxy");
-            audioStreamPrx.sendChunkAsync(0, data, encoding,timestamp);
-        }
-        catch(Ice.LocalException e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-        }
-        catch (Exception e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-        }
-
-        if (ic != null)
-        {
-            // Clean up
-            try
-            {
-                ic.destroy();
-            }
-            catch (Exception e)
-            {
-                Log.e("ArmarXSpeech", e.toString());
-            }
-        }
-    }
-}*/
-
 
 class TextListenerThread implements Runnable
 {
@@ -353,7 +242,8 @@ class TextListenerThread implements Runnable
             initData = new Ice.InitializationData();
             communicator = Ice.Util.initialize(initData);
 
-            Ice.ObjectPrx obj = communicator.stringToProxy("IceStorm/TopicManager:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_PRINTER_SERVER);
+            Log.d("Client Connection", "IP Server: "+Client.IP_ADDRESS_SERVER);
+            Ice.ObjectPrx obj = communicator.stringToProxy("IceStorm/TopicManager:tcp -p "+Client.PORT_SERVER+" -h "+Client.IP_ADDRESS_SERVER);
             IceStorm.TopicManagerPrx topicManager = IceStorm.TopicManagerPrxHelper.checkedCast(obj);
             IceStorm.TopicPrx topic = null;
 
@@ -372,10 +262,6 @@ class TextListenerThread implements Runnable
                 }
             }
 
-            /*
-            Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
-            MonitorPrx monitor = MonitorPrxHelper.uncheckedCast(pub);
-            monitor.report(msg);*/
             Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
             TextListenerInterfacePrx textListener = TextListenerInterfacePrxHelper.uncheckedCast(pub);
             textListener.reportText(msg);
@@ -403,59 +289,3 @@ class TextListenerThread implements Runnable
         }
     }
 }
-
-/*
-class PrinterThread implements Runnable
-{
-    String msg;
-
-    public PrinterThread(Object parameter)
-    {
-        this.msg = (String)parameter;
-    }
-
-    public void run()
-    {
-        Ice.InitializationData initData = null;
-        Ice.Communicator ic = null;
-
-        try
-        {
-            initData = new Ice.InitializationData();
-            ic = Ice.Util.initialize(initData);
-
-            Ice.ObjectPrx base = ic.stringToProxy("SimplePrinter:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_PRINTER_SERVER);
-            //Demo.PrinterPrx printer = Demo.PrinterPrxHelper.checkedCast(base);
-            armarx.TextListenerInterfacePrx textListener = armarx.TextListenerInterfacePrxHelper.checkedCast(base);
-            if (textListener == null)
-                throw new Error("Invalid proxy");
-
-            //printer.printString(this.msg);
-            textListener.reportText(this.msg);
-
-        }
-        catch(Ice.LocalException e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-        }
-        catch (Exception e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-        }
-
-        if (ic != null)
-        {
-            // Clean up
-            try
-            {
-                ic.destroy();
-            }
-            catch (Exception e)
-            {
-                Log.e("ArmarXSpeech", e.toString());
-            }
-        }
-    }
-}
-*/
-

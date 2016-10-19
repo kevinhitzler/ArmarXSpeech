@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 
 import armarx.AudioEncoding;
@@ -52,7 +53,7 @@ public class MainActivity extends AppCompatActivity
     private static final String KWS_SEARCH = "wakeup";
 
     // used to activate armar speech recognition
-    private static final String KEYPHRASE = "OK ARMAR FOUR";
+    private static final String KEYPHRASE = "OKAY ARMAR";
 
     // Used to handle permission request
     private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
@@ -101,7 +102,6 @@ public class MainActivity extends AppCompatActivity
                 long millis = System.currentTimeMillis();
                 if((millis - lastTime) > 1000)
                 {
-                    Log.e(TAG, "YES: "+ Long.toString(millis-lastTime));
                     if(isListening)
                     {
                         stopListenX(true, true);
@@ -308,10 +308,10 @@ public class MainActivity extends AppCompatActivity
 
         recognizer = SpeechRecognizerSetup.defaultSetup()
                 .setAcousticModel(new File(assetsDir, "en-us-ptm"))
-                .setDictionary(new File(assetsDir, "2000.dic"))
+                .setDictionary(new File(assetsDir, "3979.dic"))
 
                 //.setRawLogDir(assetsDir) // To disable logging of raw audio comment out this call (takes a lot of space on the device)
-                .setKeywordThreshold(1e-45f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
+                .setKeywordThreshold(1e-30f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
                 .setBoolean("-allphone_ci", true)  // Use context-independent phonetic search, context-dependent is too slow for mobile
 
 
@@ -375,6 +375,7 @@ public class MainActivity extends AppCompatActivity
                     waveRecorder.startRecording();
                 }
             });
+
         }
         else
         {
@@ -394,6 +395,7 @@ public class MainActivity extends AppCompatActivity
         // stop recording
         waveRecorder.stopRecording();
 
+
         //send chunks
         if (streamFile) {
 
@@ -411,7 +413,7 @@ public class MainActivity extends AppCompatActivity
                         buf.close();
 
                         //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
-                        Client.streamFile(getApplicationContext(), waveRecorder.getFilename(), AudioEncoding.PCM, System.currentTimeMillis());
+                        Client.streamFile(getApplicationContext(), waveRecorder.getFilename(), AudioEncoding.PCM, System.currentTimeMillis(), waveRecorder.getMinBufferSize());
                     } catch (FileNotFoundException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();

@@ -9,7 +9,7 @@ import armarx.AudioEncoding;
 public class AsyncStreamingInterface extends armarx._AsyncStreamingInterfaceDisp
 {
     @Override
-    public void sendChunkAsync(int offset, byte[] data, AudioEncoding encoding, long timestamp, Current __current)
+    public void sendChunkAsync(int offset, byte[] data, int minBufferSize, AudioEncoding encoding, long timestamp, Current __current)
     {
 
     }

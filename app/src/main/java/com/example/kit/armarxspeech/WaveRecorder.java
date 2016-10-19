@@ -1,5 +1,6 @@
 package com.example.kit.armarxspeech;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -8,6 +9,7 @@ import java.io.IOException;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.os.AsyncTask;
 import android.os.Environment;
 import android.util.Log;
 
@@ -77,6 +79,29 @@ public class WaveRecorder {
         return path;
     }
 
+    public String getTempFilename() {
+
+        String filepath = Environment.getExternalStorageDirectory().getAbsolutePath()
+                + "/Android/data/com.example.kit.armarxspeech/files/tmp/";
+        File file = new File(filepath,AUDIO_RECORDER_FOLDER);
+
+        if (!file.exists()) {
+            file.mkdirs();
+        }
+
+        File tempFile = new File(filepath,AUDIO_RECORDER_TEMP_FILE);
+
+        String path = file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE;
+        Log.i(TAG, "getTempFilename(): "+path);
+
+        return path;
+    }
+
+    public int getMinBufferSize()
+    {
+       return bufferSize;
+    }
+
     public void startRecording() {
         recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
                 RECORDER_SAMPLERATE,
@@ -92,7 +117,6 @@ public class WaveRecorder {
         recordingThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                //streamAudioData();                        add this one here
                 writeAudioDataToFile();
             }
         }, "AudioRecorder Thread");
