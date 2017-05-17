@@ -10,13 +10,8 @@ import Ice.Current;
 public class TextListenerInterface extends armarx._TextListenerInterfaceDisp
 {
     @Override
-    public void reportText(String text, Current __current)
+    public void reportText(String text, String ip, Current __current)
     {
         Log.w("ArmarXSpeech", "Here it is!");
-    }
-
-    @Override
-    public void reportTextWithParams(String text, String[] params, Current __current)
-    {
     }
 }

@@ -4,10 +4,13 @@
     <string name="navigation_drawer_open">Open navigation drawer</string>
     <string name="navigation_drawer_close">Close navigation drawer</string>
 
-    <string name="prompt_text">Armar: What can I do for you?</string>
     <string name="warning_muted">Speech activation service muted.</string>
     <string name="action_settings">Settings</string>
     <string name="action_undo"><u>UNDO</u></string>
-    <string name="kws_status">Say \'Ok Armar\' or click on the button below to start the conversation.</string>
+    <string name="kws_status">Press the button below to start the conversation.</string>
     <string name="listening">"Armar is listening..."</string>
+    <string name="ok">OK</string>
+
+    <string name="permission_write_external_storage_rationale">We need your permission to write audio chunks to your phone.</string>
+    <string name="permission_record_audio_rationale">We need your permission to record audio and send it to the robot.</string>
 </resources>

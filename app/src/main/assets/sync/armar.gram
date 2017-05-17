@@ -1,5 +1,0 @@
-#JSGF V1.0;
-
-grammar armar;
-
-public <item> = armar | four | okay | okay four | okay armar four;

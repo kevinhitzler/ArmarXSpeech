@@ -1,18 +1,24 @@
 package com.example.kit.armarxspeech;
 
 import android.Manifest;
+import android.app.Dialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
+import android.os.Vibrator;
 import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.support.design.widget.NavigationView;
 import android.support.v4.view.GravityCompat;
@@ -22,30 +28,22 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashMap;
-
 import armarx.AudioEncoding;
-import edu.cmu.pocketsphinx.Assets;
-import edu.cmu.pocketsphinx.Hypothesis;
-import edu.cmu.pocketsphinx.RecognitionListener;
-import edu.cmu.pocketsphinx.SpeechRecognizerSetup;
-import edu.cmu.pocketsphinx.SpeechRecognizer;
 
 
 public class MainActivity extends AppCompatActivity
-        implements NavigationView.OnNavigationItemSelectedListener, RecognitionListener
+        implements NavigationView.OnNavigationItemSelectedListener
 {
     public static final String TAG = "ArmarXSpeech";
 
@@ -55,20 +53,18 @@ public class MainActivity extends AppCompatActivity
     // used to activate armar speech recognition
     private static final String KEYPHRASE = "OKAY ARMAR";
 
-    // Used to handle permission request
-    private static final int PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
+    // App permissions
+    private static final int MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE = 0;
+    private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
 
     public static int N_TASKS = 0;
     private static boolean isListening = false;
     private static boolean isMuted = false;
 
-    private SpeechRecognizer recognizer;
     private long lastTime = 0;
     private WaveRecorder waveRecorder;
     private HashMap<String, Integer> captions;
-    private MediaPlayer m_notify;
     private static String mFileName = null;
-    private TextView s_notify;
     private FloatingActionButton fab_micro, fab_send;
     private LinearLayout warning_bar;
     private TextView warning_action;
@@ -93,53 +89,24 @@ public class MainActivity extends AppCompatActivity
         NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
 
-        RelativeLayout content_layout = (RelativeLayout) findViewById(R.id.content_layout);
-        content_layout.setOnClickListener(new View.OnClickListener()
-        {
-            @Override
-            public void onClick(View v)
-            {
-                long millis = System.currentTimeMillis();
-                if((millis - lastTime) > 1000)
-                {
-                    if(isListening)
-                    {
-                        stopListenX(true, true);
-                    }
-                    lastTime = millis;
-                }
-                else
-                {
-                    Log.e(TAG, "NOPE: "+ Long.toString(millis-lastTime));
-                }
-            }
-        });
-
         fab_micro = (FloatingActionButton) findViewById(R.id.fab_micro);
-        fab_micro.setOnClickListener(new View.OnClickListener()
+        fab_micro.setOnTouchListener(new View.OnTouchListener() {
+
+        @Override
+        public boolean onTouch(View v, MotionEvent event)
         {
-            @Override
-            public void onClick(View view)
+            if(event.getAction() == MotionEvent.ACTION_DOWN)
             {
-                long millis = System.currentTimeMillis();
-                if((millis - lastTime) > 1000)
-                {
-                    Log.e(TAG, "YES: "+ Long.toString(millis-lastTime));
-                    if(isListening)
-                    {
-                        stopListenX(true, true);
-                    }
-                    else
-                    {
-                        startListenX();
-                    }
-                    lastTime = millis;
-                }
-                else
-                {
-                    Log.e(TAG, "NOPE: "+ Long.toString(millis-lastTime));
-                }
+                startListenX();
+                Vibrator vb = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                vb.vibrate(70);
             }
+            if(event.getAction() == MotionEvent.ACTION_UP)
+            {
+                stopListenX(true);
+            }
+            return true;
+        }
         });
 
         fab_send = (FloatingActionButton) findViewById(R.id.fab_send);
@@ -195,9 +162,6 @@ public class MainActivity extends AppCompatActivity
                 warning_bar.setVisibility(View.GONE);
                 MenuItem action_mute = (MenuItem) options_menu.findItem(R.id.action_mute);
                 action_mute.setChecked(false);
-
-                Log.d(TAG, "warning_action.onClick calls switchSearch");
-                runRecognizerSetup();
             }
         });
 
@@ -223,174 +187,144 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    private void runRecognizerSetup()
+
+    private boolean allPermissionsGranted()
     {
-        // Check if user has given permission to record audio
-        int permissionCheck = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO);
-        if (permissionCheck == PackageManager.PERMISSION_DENIED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSIONS_REQUEST_RECORD_AUDIO);
-            return;
+        boolean WRITE_EXTERNAL_STORAGE_GRANTED = false;
+        boolean RECORD_AUDIO_GRANTED = false;
+
+        // check for permissions
+        // WRITE EXTERNAL STORAGE PERMISSION
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED)
+        {
+            // External Storage permission has not been granted.
+            requestWriteExternalStoragePermission();
+        }
+        else
+        {
+            // Write External Storage permissions is already available, show the camera preview.
+            Log.i(TAG, "WRITE_EXTERNAL_STORAGE permission has already been granted.");
+            WRITE_EXTERNAL_STORAGE_GRANTED = true;
         }
 
-        // Recognizer initialization is a time-consuming and it involves IO,
-        // so we execute it in async task
-        new AsyncTask<Void, Void, Exception>()
+        // RECORD AUDIO PERMISSION
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED)
         {
-            @Override
-            protected Exception doInBackground(Void... params)
-            {
-                N_TASKS++;
-                try
-                {
-                    Assets assets = new Assets(MainActivity.this);
-                    File assetDir = assets.syncAssets();
-                    setupRecognizer(assetDir);
-                }
-                catch (IOException e)
-                {
-                    return e;
-                }
-                return null;
-            }
-
-            @Override
-            protected void onPostExecute(final Exception result)
-            {
-                if (result != null)
-                {
-                    ((TextView) findViewById(R.id.status))
-                            .setText("Failed to init recognizer " + result);
-                    Log.e(TAG, "Error onPostExecute");
-                }
-                else
-                {
-                    switchSearch(KWS_SEARCH);
-                }
-            }
-        }.execute();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           String[] permissions, int[] grantResults)
-    {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == PERMISSIONS_REQUEST_RECORD_AUDIO)
+            // Record Audio permission has not been granted.
+            requestRecordAudioPermission();
+        }
+        else
         {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
-            {
-                runRecognizerSetup();
-            }
-            else
-            {
-                finish();
-            }
+            // Record Audio permission is already available.
+            Log.i(TAG, "RECORD AUDIO permission has already been granted.");
+            RECORD_AUDIO_GRANTED = true;
+        }
+
+        if(WRITE_EXTERNAL_STORAGE_GRANTED &&
+           RECORD_AUDIO_GRANTED)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
+
+    private void requestWriteExternalStoragePermission()
+    {
+        Log.i(TAG, "Write External Storage permission has NOT been granted. Requesting permission.");
+
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE))
+        {
+            // Provide an additional rationale to the user if the permission was not granted
+            // and the user would benefit from additional context for the use of the permission.
+            // For example if the user has previously denied the permission.
+            Log.i(TAG, "Displaying write external storage permission rationale to provide additional context.");
+
+            Snackbar.make(warning_bar, R.string.permission_write_external_storage_rationale,
+                    Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.ok, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            ActivityCompat.requestPermissions(MainActivity.this,
+                                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                    MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE);
+                        }
+                    })
+                    .show();
+        }
+        else
+        {
+            // Write External Storage permission has not been granted yet. Request it directly.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE);
+        }
+    }
+
+    private void requestRecordAudioPermission()
+    {
+        Log.i(TAG, "Record audio permission has NOT been granted. Requesting permission.");
+
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                Manifest.permission.RECORD_AUDIO))
+        {
+            // Provide an additional rationale to the user if the permission was not granted
+            // and the user would benefit from additional context for the use of the permission.
+            // For example if the user has previously denied the permission.
+            Log.i(TAG, "Displaying record audio storage permission rationale to provide additional context.");
+
+            Snackbar.make(warning_bar, R.string.permission_record_audio_rationale,
+                    Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.ok, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            ActivityCompat.requestPermissions(MainActivity.this,
+                                    new String[]{Manifest.permission.RECORD_AUDIO},
+                                    MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
+                        }
+                    })
+                    .show();
+        }
+        else
+        {
+            // Record audio permission has not been granted yet. Request it directly.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO},
+                    MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
+        }
+    }
+
 
     @Override
     public void onDestroy()
     {
         super.onDestroy();
-        stopListenX(false, false);
-
-        if (recognizer != null) {
-            recognizer.cancel();
-            recognizer.shutdown();
-        }
-    }
-
-    private void setupRecognizer(File assetsDir) throws IOException
-    {
-        // The recognizer can be configured to perform multiple searches
-        // of different kind and switch between them
-
-        recognizer = SpeechRecognizerSetup.defaultSetup()
-                .setAcousticModel(new File(assetsDir, "en-us-ptm"))
-                .setDictionary(new File(assetsDir, "3979.dic"))
-
-                //.setRawLogDir(assetsDir) // To disable logging of raw audio comment out this call (takes a lot of space on the device)
-                .setKeywordThreshold(1e-30f) // Threshold to tune for keyphrase to balance between false alarms and misses old: 1e-45f
-                .setBoolean("-allphone_ci", true)  // Use context-independent phonetic search, context-dependent is too slow for mobile
-
-
-                .getRecognizer();
-        recognizer.addListener(this);
-
-        // Create keyword-activation search
-        recognizer.addKeyphraseSearch(KWS_SEARCH, KEYPHRASE);
-    }
-
-    private void switchSearch(String searchName)
-    {
-        recognizer.stop();
-
-        if (!isMuted) {
-            // If we are spotting
-            if (searchName.equals(KWS_SEARCH))
-            {
-                recognizer.startListening(searchName);
-            }
-
-            String caption = getResources().getString(captions.get(KWS_SEARCH));
-            ((TextView) findViewById(R.id.status)).setText(caption);
-        }
+        stopListenX(false);
     }
 
     private void startListenX()
     {
-        //stop recognizer
-        isListening = true;
-
-        if (recognizer != null) {
-            recognizer.cancel();
-            recognizer.shutdown();
-        }
-
-        // change status
-        ((TextView) findViewById(R.id.status)).setText(getResources().getString(R.string.listening));
-
-        // change color
-        ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
-        fab_micro.setBackgroundTintList(colorStateList);
-
-        // play sound
-        if(m_notify == null)
+        if(allPermissionsGranted() == true)
         {
-            m_notify = MediaPlayer.create(getApplicationContext(), R.raw.beep_sound);
-            m_notify.setLooping(false);
-            m_notify.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                @Override
-                public void onPrepared(MediaPlayer mp) {
-                    mp.start();
-                }
-            });
-            m_notify.setOnCompletionListener(new MediaPlayer.OnCompletionListener()
-            {
-                @Override
-                public void onCompletion(MediaPlayer mp)
-                {
-                    // start recording
-                    waveRecorder.startRecording();
-                }
-            });
+            //stop recognizer
+            isListening = true;
 
-        }
-        else
-        {
-            m_notify.start();
-        }
+            // change status
+            ((TextView) findViewById(R.id.status)).setText(getResources().getString(R.string.listening));
 
-        // show snackbar
-        if(s_notify == null)
-        {
-            s_notify = (TextView) findViewById(R.id.prompt);
+            // change color
+            ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
+            fab_micro.setBackgroundTintList(colorStateList);
+
+            //start listening
+            waveRecorder.startRecording();
         }
-        s_notify.setVisibility(View.VISIBLE);
     }
 
-    private void stopListenX(boolean streamFile, boolean startRecognizer)
+    private void stopListenX(boolean streamFile)
     {
         // stop recording
         waveRecorder.stopRecording();
@@ -404,8 +338,10 @@ public class MainActivity extends AppCompatActivity
                 @Override
                 protected Exception doInBackground(Void... params)
                 {
-                    File file = new File(waveRecorder.getFilename());
+                    File file = new File(waveRecorder.getTempFile());
+
                     int size = (int) file.length();
+                    Log.d("MainActivity", "Get File: "+file.getAbsolutePath()+", Size: "+size);
                     byte[] bytes = new byte[size];
                     try {
                         BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
@@ -413,7 +349,7 @@ public class MainActivity extends AppCompatActivity
                         buf.close();
 
                         //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
-                        Client.streamFile(getApplicationContext(), waveRecorder.getFilename(), AudioEncoding.PCM, System.currentTimeMillis(), waveRecorder.getMinBufferSize());
+                        Client.streamFile(getApplicationContext(), waveRecorder.getTempFile(), AudioEncoding.PCM, System.currentTimeMillis(), waveRecorder.getMinBufferSize());
                     } catch (FileNotFoundException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
@@ -434,30 +370,15 @@ public class MainActivity extends AppCompatActivity
             fab_micro.setBackgroundTintList(colorStateList);
         }
 
-        // pause and hide
-        if(m_notify != null)
-        {
-            m_notify.pause();
-        }
-        if(s_notify != null)
-        {
-            s_notify.setVisibility(View.GONE);
-        }
-
         String caption = getResources().getString(captions.get(KWS_SEARCH));
         ((TextView) findViewById(R.id.status)).setText(caption);
 
-        if(startRecognizer)
-        {
-            if (recognizer != null) {
-                recognizer.cancel();
-                recognizer.shutdown();
-            }
-
-            runRecognizerSetup();
-        }
-
         isListening = false;
+    }
+
+    public void showMessageToUser(String text)
+    {
+        ((TextView) findViewById(R.id.status)).setText(text);
     }
 
     @Override
@@ -493,8 +414,42 @@ public class MainActivity extends AppCompatActivity
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings)
         {
-            //display in short period of time
-            Toast.makeText(getApplicationContext(), "No settings available.", Toast.LENGTH_SHORT).show();
+            //display ip and port settings
+            // custom dialog
+            final Dialog dialog = new Dialog(this);
+            dialog.setContentView(R.layout.settings_dialog);
+
+            final EditText editTextIP = (EditText) dialog.findViewById(R.id.editTextIP);
+            editTextIP.setText(Client.IP_ADDRESS_SERVER);
+
+            final EditText editTextPort = (EditText) dialog.findViewById(R.id.editTextPort);
+            editTextPort.setText(Client.PORT_SERVER);
+
+            // ok button
+            Button okBtn = (Button) dialog.findViewById(R.id.btnSettingsOK);
+            // if button is clicked, close the custom dialog
+            okBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Client.IP_ADDRESS_SERVER = editTextIP.getText().toString();
+                    Client.PORT_SERVER = editTextPort.getText().toString();
+                    dialog.dismiss();
+                }
+            });
+
+            // cancel button
+            Button cancelBtn = (Button) dialog.findViewById(R.id.btnSettingsCancel);
+            // if button is clicked, close the custom dialog
+            cancelBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    dialog.dismiss();
+                }
+            });
+
+            dialog.show();
+
+
             return true;
         }
         else if(id == R.id.action_mute)
@@ -505,9 +460,6 @@ public class MainActivity extends AppCompatActivity
                 isMuted = false;
                 warning_bar.setVisibility(View.GONE);
                 item.setChecked(false);
-
-                Log.d(TAG, "onOptionsItemSelected() calls switchSearch");
-                runRecognizerSetup();
             }
             else
             {
@@ -515,12 +467,6 @@ public class MainActivity extends AppCompatActivity
                 isMuted = true;
                 warning_bar.setVisibility(View.VISIBLE);
                 item.setChecked(true);
-                if(recognizer != null)
-                {
-                    recognizer.stop();
-                    recognizer.cancel();
-                    recognizer.shutdown();
-                }
             }
 
             return true;
@@ -552,80 +498,6 @@ public class MainActivity extends AppCompatActivity
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
-    }
-
-    @Override
-    public void onBeginningOfSpeech() {
-    }
-
-    /**
-     * We stop recognizer here to get a final result
-     */
-    @Override
-    public void onEndOfSpeech() {
-       /* if (recognizer != null && !recognizer.getSearchName().equals(KWS_SEARCH))
-            switchSearch(KWS_SEARCH);*/
-    }
-
-    /**
-     * In partial result we get quick updates about current hypothesis. In
-     * keyword spotting mode we can react here, in other modes we need to wait
-     * for final result in onResult.
-     */
-    @Override
-    public void onPartialResult(Hypothesis hypothesis)
-    {
-        if (hypothesis == null)
-            return;
-
-        String text = hypothesis.getHypstr();
-        if (text.equals(KEYPHRASE))
-            startListenX();
-        else
-            ((TextView) findViewById(R.id.status)).setText(text);
-    }
-
-    /**
-     * This callback is called when we stop the recognizer.
-     */
-    @Override
-    public void onResult(Hypothesis hypothesis) {
-    }
-
-    @Override
-    public void onError(Exception error)
-    {
-        Log.e(TAG, "Error MainActivity Callback");
-        ((TextView) findViewById(R.id.status)).setText(error.getMessage());
-        error.printStackTrace();
-
-        Log.e(TAG, "NUMBER OF TASKS: "+ Integer.toString(N_TASKS));
-    }
-
-    @Override
-    public void onTimeout()
-    {
-        //switchSearch(KWS_SEARCH);
-    }
-
-    @Override
-    protected void onResume()
-    {
-        super.onResume();
-        runRecognizerSetup();
-    }
-
-    @Override
-    protected void onPause()
-    {
-        super.onPause();
-
-        stopListenX(false, false);
-        if (recognizer != null)
-        {
-            recognizer.cancel();
-            recognizer.shutdown();
-        }
     }
 
 }

@@ -1,6 +1,7 @@
+
+
 package com.example.kit.armarxspeech;
 
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -9,15 +10,14 @@ import java.io.IOException;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
-import android.os.AsyncTask;
 import android.os.Environment;
 import android.util.Log;
 
-import armarx.AudioEncoding;
 
 /**
  * Created by Kevin on 14.07.2016.
  */
+
 public class WaveRecorder {
 
     private static final String TAG = "WaveRecorder";
@@ -25,8 +25,8 @@ public class WaveRecorder {
     private static final String AUDIO_RECORDER_FILE = "record_tmp.wav";
     private static final String AUDIO_RECORDER_FOLDER = "AudioRecorder";
     private static final String AUDIO_RECORDER_TEMP_FILE = "record_tmp.raw";
-    private static final int RECORDER_SAMPLERATE = 44100;
-    private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_STEREO;
+    private static final int RECORDER_SAMPLERATE = 16000;
+    private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
     private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     short[] audioData;
 
@@ -34,28 +34,12 @@ public class WaveRecorder {
     private int bufferSize = 0;
     private Thread recordingThread = null;
     private boolean isRecording = false;
-    int[] bufferData;
-    int bytesRecorded;
 
     public WaveRecorder()
     {
         bufferSize = AudioRecord.getMinBufferSize
                 (RECORDER_SAMPLERATE,RECORDER_CHANNELS,RECORDER_AUDIO_ENCODING)*3;
         audioData = new short [bufferSize]; //short array that pcm data is put into.
-    }
-
-    public String getFilename()
-    {
-        String filepath = Environment.getExternalStorageDirectory().getAbsolutePath()
-                + "/Android/data/com.example.kit.armarxspeech/files/wav/";
-        File file = new File(filepath,AUDIO_RECORDER_FOLDER);
-
-        if (!file.exists()) {
-            file.mkdirs();
-        }
-
-        return (file.getAbsolutePath() + "/" +
-                AUDIO_RECORDER_FILE);
     }
 
     private String getTempFilenameAndDeleteOld() {
@@ -79,8 +63,8 @@ public class WaveRecorder {
         return path;
     }
 
-    public String getTempFilename() {
-
+    public String getTempFile()
+    {
         String filepath = Environment.getExternalStorageDirectory().getAbsolutePath()
                 + "/Android/data/com.example.kit.armarxspeech/files/tmp/";
         File file = new File(filepath,AUDIO_RECORDER_FOLDER);
@@ -90,11 +74,28 @@ public class WaveRecorder {
         }
 
         File tempFile = new File(filepath,AUDIO_RECORDER_TEMP_FILE);
-
         String path = file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE;
-        Log.i(TAG, "getTempFilename(): "+path);
+        Log.i(TAG, "getTempFilenameAndDeleteOld(): "+path);
 
         return path;
+    }
+
+    public static void deleteTempFile()
+    {
+        String filepath = Environment.getExternalStorageDirectory().getAbsolutePath()
+                + "/Android/data/com.example.kit.armarxspeech/files/tmp/";
+        File file = new File(filepath,AUDIO_RECORDER_FOLDER);
+
+        if (!file.exists()) {
+            file.mkdirs();
+        }
+
+        File tempFile = new File(filepath,AUDIO_RECORDER_TEMP_FILE);
+        String path = file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE;
+        Log.i(TAG, "getTempFilenameAndDeleteOld(): "+path);
+
+        if (tempFile.exists())
+            tempFile.delete();
     }
 
     public int getMinBufferSize()
@@ -141,12 +142,9 @@ public class WaveRecorder {
         if (null != os) {
             while(isRecording) {
                 read = recorder.read(data, 0, bufferSize);
-                if (read > 0)
-                {
-                }
-
                 if (AudioRecord.ERROR_INVALID_OPERATION != read) {
                     try {
+                        //Log.d("WaveRecorder", "Writing data...");
                         os.write(data);
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -160,6 +158,10 @@ public class WaveRecorder {
                 e.printStackTrace();
             }
         }
+
+        File file = new File(filename);
+        int file_size = Integer.parseInt(String.valueOf(file.length()/1024));
+        Log.d("WriteAudioData", "Get File: "+file.getAbsolutePath()+", Size: "+file_size);
     }
 
     public boolean hasStopped()
@@ -184,7 +186,8 @@ public class WaveRecorder {
             recordingThread = null;
         }
 
-        copyWaveFile(getTempFilenameAndDeleteOld(),getFilename());
+        // we are using raw pcm data
+        //copyWaveFile(getTempFilenameAndDeleteOld(),getFilename());
     }
 
     private void copyWaveFile(String inFilename,String outFilename){

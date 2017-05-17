@@ -54,7 +54,7 @@ module armarx
 
     interface AsyncStreamingInterface
     {
-        void sendChunkAsync(int offset, AudioChunk data, int minBufferSize, AudioEncoding encoding, long timestamp);
+        void sendChunkAsync(int offset, AudioChunk data, int minBufferSize, AudioEncoding encoding, long timestamp, bool isNewSentence, string ip);
     };
 
     /*!
@@ -80,15 +80,20 @@ module armarx
          * \brief Callback method that is called when a piece of text has been published.
          * \param text Text.
          */
-        void reportText(string text);
+        void reportText(string text, string ip);
+
+    };
+
+    /*!
+    * \brief Interface implemented by components that use a text stream (e.g. for running a dialog system).
+    */
+    interface TextResponderInterface
+    {
         /*!
-         * \brief Callback method that is called when a piece of text with params has been published.
+         * \brief Callback method that is called when a piece of text has been published.
          * \param text Text.
-         * \param string vector params.
          */
-
-         void reportTextWithParams(string text,Ice::StringSeq params);
-
+        void sendText(string text);
     };
 
     enum FeedbackType
