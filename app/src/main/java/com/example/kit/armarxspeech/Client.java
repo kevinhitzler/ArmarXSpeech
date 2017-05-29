@@ -1,144 +1,350 @@
 package com.example.kit.armarxspeech;
-
-import android.content.Context;
-import android.nfc.Tag;
 import android.os.AsyncTask;
 import android.util.Log;
-import android.widget.Toast;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.util.Collections;
-import java.util.EnumSet;
 import java.util.LinkedList;
-import java.util.List;
-import java.util.logging.FileHandler;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
+import Glacier2.SessionHelper;
+import Glacier2.SessionNotExistException;
 import Ice.AsyncResult;
-import armarx.AsyncStreamingInterfacePrx;
 import armarx.AudioEncoding;
+import armarx.ChatCallbackPrx;
+import armarx.ChatCallbackPrxHelper;
+import armarx.ChatSessionPrx;
+import armarx.ChatSessionPrxHelper;
 
-import armarx.TextListenerInterfacePrx;
-import armarx.TextListenerInterfacePrxHelper;
-import demo.MonitorPrx;
-import demo.MonitorPrxHelper;
-
+/**
+ * Created by Kevin on 29.05.2017.
+ */
 public class Client
 {
-    private static final String TAG = "Client";
-    public static String IP_ADDRESS_SERVER = "192.168.1.168"; //"192.168.0.19";
-    public static String PORT_SERVER = "80";
+    public static String SERVER_IP = "192.168.43.48";
+    public static String SERVER_PORT = "80";
 
+    private boolean _isReady;
+    private MainActivity _activity;
+    private final ScheduledExecutorService _scheduler;
+    private Ice.Communicator _communicator;
+    private Glacier2.SessionHelper _session;
+    private Glacier2.SessionFactoryHelper _factory;
+    private Ice.InitializationData _initData;
+    private ChatSessionPrx _chat;
 
-    public static void send(String msg) {
-        new Thread(new TextListenerThread(msg)).run();
+    public Client(MainActivity activity)
+    {
+        _isReady = false;
+        _activity = activity;
+        _scheduler = Executors.newScheduledThreadPool(1);
     }
 
-    public static void streamFile(Context applicationContext, String filepath, AudioEncoding encoding, long timestamp, int minBufferSize) {
-        new AsyncStreamThread(applicationContext, filepath, encoding, timestamp, minBufferSize).execute();
-    }
+    private void initialize()
+    {
+        // set initial glacier2 properties
+        //Ice.StringSeqHolder argsH = new Ice.StringSeqHolder(args);
+        Ice.Properties properties = Ice.Util.createProperties();
+        properties.setProperty("Ice.Default.Router", "Glacier2/router:tcp -h "+ SERVER_IP + " -p " + SERVER_PORT);
+        properties.setProperty("Ice.RetryIntervals", "-1");
+        properties.setProperty("Ice.Trace.Network", "0"); //set to 1 or 2 to debug
+        _initData = new Ice.InitializationData();
+        _initData.properties = properties;
 
-    /**
-     * Get IP address from first non-localhost interface
-     * @param useIPv4  true=return ipv4, false=return ipv6
-     * @return  address or empty string
-     */
-    public static String getIPAddress(boolean useIPv4) {
-        try {
-            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
-            for (NetworkInterface intf : interfaces) {
-                List<InetAddress> addrs = Collections.list(intf.getInetAddresses());
-                for (InetAddress addr : addrs) {
-                    if (!addr.isLoopbackAddress()) {
-                        String sAddr = addr.getHostAddress();
-                        //boolean isIPv4 = InetAddressUtils.isIPv4Address(sAddr);
-                        boolean isIPv4 = sAddr.indexOf(':')<0;
+        // add SessionFactoryHelper for communicator intialization
+        _factory = new Glacier2.SessionFactoryHelper(_initData,
+                new Glacier2.SessionCallback()
+                {
+                    @Override
+                    public void connected(Glacier2.SessionHelper session)
+                            throws Glacier2.SessionNotExistException
+                    {
+                        // If the session has been reassigned avoid the spurious callback.
+                        if (session != _session)
+                        {
+                            System.out.println("Warning: Spurious callback. Exit.");
+                            return;
+                        }
 
-                        if (useIPv4) {
-                            if (isIPv4)
-                                return sAddr;
-                        } else {
-                            if (!isIPv4) {
-                                int delim = sAddr.indexOf('%'); // drop ip6 zone suffix
-                                return delim<0 ? sAddr.toUpperCase() : sAddr.substring(0, delim).toUpperCase();
-                            }
+                        // Check session one more time
+                        if (!_session.isConnected())
+                        {
+                            System.out.println("Warning: Session is no longer connected! Exit.");
+                            return;
+                        }
+
+                        System.out.println("Connected to Glacier2 Service. OK!");
+                        _activity.runOnUiThread(new ConsoleWriter("Please press the button below to start."));
+
+                        registerChatCallback();
+                        ready();
+                    }
+
+                    @Override
+                    public void disconnected(Glacier2.SessionHelper session)
+                    {
+                        System.out.println("Disconnected from Glacier2 Service.");
+                    }
+
+                    @Override
+                    public void connectFailed(Glacier2.SessionHelper session, Throwable exception)
+                    {
+                        String status = null;
+
+                        try
+                        {
+                            throw exception;
+                        }
+                        catch (final Glacier2.CannotCreateSessionException ex)
+                        {
+                            status = "Login failed (Glacier2.CannotCreateSessionException):\n"+ ex.reason;
+                            System.out.println(status);
+                        }
+                        catch (final Glacier2.PermissionDeniedException ex)
+                        {
+                            status = "Login failed (Glacier2.PermissionDeniedException):\n"+ ex.reason;
+                            System.out.println(status);
+                        }
+                        catch (Ice.Exception ex)
+                        {
+                            status = "Login failed (" + ex.ice_name()+ ").\n"+ "Please check your configuration.";
+                            System.out.println(status);
+                        }
+                        catch (Throwable ex)
+                        {
+                            status = ex.getStackTrace().toString();
+                            ex.printStackTrace();
+                        }
+
+                        // show user error & retry with scheduler
+                        _scheduler.schedule(new Connector(), 2000, TimeUnit.MILLISECONDS);
+                    }
+
+                    @Override
+                    public void createdCommunicator(SessionHelper session)
+                    {
+                        if (session.communicator() != null)
+                        {
+                            System.out.println("Communicator initialized. OK!");
                         }
                     }
-                }
-            }
-        } catch (Exception ex) { } // for now eat exceptions
-        return "";
-    }
-}
+                });
 
-class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
+        // Connect to session
+        System.out.print("Trying to connect to Session ...");
+        _activity.runOnUiThread(new ConsoleWriter("Trying to connect to '"+SERVER_IP+":"+SERVER_PORT+"'"));
 
-    String filepath;
-    AudioEncoding encoding;
-    long timestamp;
-    Context applicationContext;
-    int minBufferSize;
-    Glacier2.SessionHelper _session;
-
-    public AsyncStreamThread(Context applicationContext, String filepath, AudioEncoding encoding, long timestamp, int minBufferSize)
-    {
-        this.filepath = (String)filepath;
-        this.encoding = (AudioEncoding) encoding;
-        this.timestamp = (long)timestamp;
-        this.applicationContext = (Context) applicationContext;
-        this.minBufferSize = minBufferSize;
+        _factory.setRouterHost(SERVER_IP);
+        _session = _factory.connect("", "");
     }
 
-    private byte[] streamPartialFile(armarx.AsyncStreamingInterfacePrx stream)
+    public void connect()
     {
-        File file = null;
-        FileInputStream fis = null;
+        _scheduler.schedule(new Connector(), 0, TimeUnit.MILLISECONDS);
+    }
+
+    public boolean isReady()
+    {
+        return _isReady;
+    }
+
+    public void sendTextMessage(String message)
+    {
+        // create new async thread to send message
+        new TextReporter(message).execute();
+    }
+
+    public void streamAudioFile(String filepath, AudioEncoding encoding, int minBufferSize)
+    {
         try
         {
-            boolean isNewSentence = true;
-            file = new File(filepath);
-            fis = new FileInputStream(file);
+            // create new async thread to send message
 
-            final int chunkSize = 1024*10;
-            byte[] byteSeq; /* = new byte[chunkSize];*/
-            int offset = 0;
+            new AsyncStreamThread(filepath, encoding, minBufferSize).execute();
+            System.out.println("OK!");
+        }
+        catch (Exception e)
+        {
+            System.out.println("Failed!");
+            System.out.println("Reason: "+e.getMessage());
+            e.printStackTrace();
+            System.out.println("Exit.");
+        }
+    }
 
-            LinkedList<Ice.AsyncResult> results = new LinkedList<AsyncResult>();
-            int numRequests = 10;
-
-            while(offset > -1)
+    public void shutdown()
+    {
+        if (_communicator != null)
+        {
+            try
             {
-                Log.d("Client", "Offset: "+offset);
-                byteSeq = new byte[chunkSize];
-                offset = fis.read(byteSeq);
-
-                // Send up to numRequests + 1 chunks asynchronously.
-                Ice.AsyncResult r = stream.begin_sendChunkAsync(offset, byteSeq, minBufferSize, AudioEncoding.PCM, System.currentTimeMillis(), isNewSentence, Client.getIPAddress(true));
-                isNewSentence = false;
-
-
-                // Wait until this request has been passed to the transport.
-                r.waitForSent();
-                results.add(r);
-
-                // Once there are more than numRequests, wait for the least
-                // recent one to complete.
-                while (results.size() > numRequests) {
-                    Ice.AsyncResult re = results.getFirst();
-                    results.removeFirst();
-                    re.waitForCompleted();
-                }
+                System.out.println("----------------------------------------");
+                System.out.print("I am done, destroying communicator...");
+                _isReady = false;
+                _communicator.destroy();
+                System.out.print("OK!");
             }
+            catch (Exception e)
+            {
+                System.out.println("Session could not be destroyed. Exit.");
+                System.out.println(e.getMessage());
+            }
+        }
+    }
 
-            // Wait for any remaining requests to complete.
+    private void registerChatCallback()
+    {
+        try
+        {
+            // register callback
+            System.out.print("Trying to register ChatCallback...");
+            ChatCallbackPrx callback = ChatCallbackPrxHelper.uncheckedCast(_session.addWithUUID(new ChatCallbackI()));
+            _chat = ChatSessionPrxHelper.uncheckedCast(_session.session());
+            _chat.setCallback(callback);
+            System.out.println("OK!\n");
+        }
+        catch (SessionNotExistException e)
+        {
+            System.out.print("Failed!\nReason: "+e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void ready()
+    {
+        System.out.println("I am ready!");
+        _isReady = true;
+    }
+
+    private class TextReporter extends AsyncTask<Void, Void, Exception>
+    {
+        String _msg;
+
+        public TextReporter(Object msg)
+        {
+            _msg = (String) msg;
+        }
+
+        private long getTimestamp()
+        {
+            return System.currentTimeMillis();
+        }
+
+        @Override
+        protected Exception doInBackground(Void... params)
+        {
+            try
+            {
+                //send messages through ChatCallbackI
+                System.out.print("Sending Message '"+_msg+"' ...");
+                _chat.sendText(getTimestamp(), "ClientApp", _msg);
+                System.out.println("OK!");
+                return null;
+            }
+            catch (Exception e)
+            {
+                System.out.println("Failed!\nReason: "+e.getMessage());
+                e.printStackTrace();
+                return e;
+            }
+        }
+
+        @Override
+        protected void onPostExecute(final Exception result)
+        {
+            if (result != null)
+            {
+                _activity.runOnUiThread(new ConsoleWriter("Sorry, message could not be sent.\n"+result.getMessage()));
+                _scheduler.schedule(new Connector(), 2000, TimeUnit.MILLISECONDS);
+            }
+        }
+    }
+
+    class ConsoleWriter implements Runnable
+    {
+        String _msg;
+
+        ConsoleWriter(String msg)
+        {
+            _msg = msg;
+        }
+        @Override
+        public void run()
+        {
+            _activity.printToConsole(_msg);
+        }
+    }
+
+    class Connector implements Runnable
+    {
+        @Override
+        public void run()
+        {
+            initialize();
+        }
+    }
+
+    class AsyncStreamThread extends AsyncTask<Void, Void, Exception>
+    {
+        String filepath;
+        AudioEncoding encoding;
+        int minBufferSize;
+        Glacier2.SessionHelper _session;
+
+        public AsyncStreamThread(String filepath, AudioEncoding encoding, int minBufferSize)
+        {
+            this.filepath = (String)filepath;
+            this.encoding = (AudioEncoding) encoding;
+            this.minBufferSize = minBufferSize;
+        }
+
+        private byte[] streamPartialFile() throws Exception
+        {
+            File file = null;
+            FileInputStream fis = null;
+            try
+            {
+                boolean isNewSentence = true;
+                file = new File(filepath);
+                fis = new FileInputStream(file);
+
+                final int chunkSize = 1024*10;
+                byte[] byteSeq; /* = new byte[chunkSize];*/
+                int offset = 0;
+
+                LinkedList<Ice.AsyncResult> results = new LinkedList<AsyncResult>();
+                int numRequests = 10;
+
+                while(offset > -1)
+                {
+                    Log.d("Client", "Offset: "+offset);
+                    byteSeq = new byte[chunkSize];
+                    offset = fis.read(byteSeq);
+
+                    // Send up to numRequests + 1 chunks asynchronously.
+                    Ice.AsyncResult r = _chat.begin_sendChunkAsync(offset, byteSeq, minBufferSize, AudioEncoding.PCM, System.currentTimeMillis(), isNewSentence);
+                    isNewSentence = false;
+
+
+                    // Wait until this request has been passed to the transport.
+                    r.waitForSent();
+                    results.add(r);
+
+                    // Once there are more than numRequests, wait for the least
+                    // recent one to complete.
+                    while (results.size() > numRequests)
+                    {
+                        Ice.AsyncResult re = results.getFirst();
+                        results.removeFirst();
+                        re.waitForCompleted();
+                    }
+                }
+
+                // Wait for any remaining requests to complete.
             /*
             while (results.size() > 0) {
                 Ice.AsyncResult res = results.getFirst();
@@ -146,293 +352,68 @@ class AsyncStreamThread extends AsyncTask<Void, Void, Exception> {
                 res.waitForCompleted();
             }*/
 
-            fis.close();
-            WaveRecorder.deleteTempFile();
-        }
-        catch (FileNotFoundException e)
-        {
-            Log.d("ClientFNF", e.getMessage());
-        }
-        catch (IOException e)
-        {
-            Log.d("ClientIO", e.getMessage());
-        }
-        finally {
-            try {
                 fis.close();
-            } catch (IOException ex) {
-                ex.printStackTrace();
+                WaveRecorder.deleteTempFile();
             }
-        }
-
-        return null;
-    }
-
-    @Override
-    protected Exception doInBackground(Void... params)
-    {
-        Ice.InitializationData initData = null;
-        Ice.Communicator ic = null;
-
-        try
-        {
-            /*
-            Ice.StringSeqHolder argsH = new Ice.StringSeqHolder(null);
-            Ice.Properties properties = Ice.Util.createProperties(argsH);
-            properties.setProperty("Ice.Default.Router", "Glacier2/router:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_SERVER);
-            properties.setProperty("Ice.RetryIntervals","-1");
-
-            initData = new Ice.InitializationData();
-            initData.properties = properties;
-
-            Glacier2.SessionFactoryHelper factory = new Glacier2.SessionFactoryHelper(initData, new Glacier2.SessionCallback()
+            catch (FileNotFoundException e)
             {
-                public void
-                connected(final Glacier2.SessionHelper session)
-                        throws Glacier2.SessionNotExistException {
-                    //
-                    // If the session has been reassigned avoid the spurious callback.
-                    //
-                    if (session != _session) {
-                        return;
-                    }
-
-                    Ice.Communicator communicator = _session
-
-
-                    Chat.ChatRoomCallbackPrx callback = Chat.ChatRoomCallbackPrxHelper.uncheckedCast(_session.addWithUUID(new ChatCallbackI()));
-
-                    _chat = Chat.ChatSessionPrxHelper.uncheckedCast(_session.session());
-                    try {
-                        _chat.begin_setCallback(callback, new Chat.Callback_ChatSession_setCallback() {
-                            @Override
-                            public void
-                            response() {
-                                _service.loginComplete();
-                            }
-
-                            @Override
-                            public void
-                            exception(Ice.LocalException ex) {
-                                AppSession.this.destroy();
-                            }
-                        });
-                    } catch (Ice.CommunicatorDestroyedException ex) {
-                        //Ignore client session was destroyed.
-                    }
-                }
-
-                public void
-                disconnected(Glacier2.SessionHelper session)
-                {
-                    if(!_destroyed) // Connection closed by user logout/exit
-                    {
-                        destroyWithError("<system-message> - The connection with the server was unexpectedly lost.\nTry again.");
-                    }
-                }
-
-                public void
-                connectFailed(Glacier2.SessionHelper session, Throwable exception)
-                {
-                    try
-                    {
-                        throw exception;
-                    }
-                    catch(final Glacier2.CannotCreateSessionException ex)
-                    {
-                        setError("Login failed (Glacier2.CannotCreateSessionException):\n" + ex.reason);
-                    }
-                    catch(final Glacier2.PermissionDeniedException ex)
-                    {
-                        setError("Login failed (Glacier2.PermissionDeniedException):\n" + ex.reason);
-                    }
-                    catch(Ice.Exception ex)
-                    {
-                        setError("Login failed (" + ex.ice_name() + ").\n" +
-                                "Please check your configuration.");
-                    }
-                    catch(final Throwable ex) {
-                        setError("Login failed:\n" + stack2string(ex));
-                    }
-                    _service.loginFailed();
-                }
-
-                public void
-                createdCommunicator(Glacier2.SessionHelper session)
-                {
-
-                    Ice.Communicator communicator = session.communicator();
-
-                    if(communicator.getProperties().getPropertyAsIntWithDefault("IceSSL.UsePlatformCAs", 0) == 0)
-                    {
-                        java.io.InputStream certStream = resources.openRawResource(R.raw.client);
-                        IceSSL.Plugin plugin = (IceSSL.Plugin)communicator.getPluginManager().getPlugin("IceSSL");
-                        plugin.setTruststoreStream(certStream);
-                        communicator.getPluginManager().initializePlugins();
-                    }
-                }
-            });
-            _session = factory.connect("", "");
-        }*/
-
-            ic = Ice.Util.initialize(initData);
-
-            Ice.ObjectPrx obj = ic.stringToProxy("IceStorm/TopicManager:tcp -h "+Client.IP_ADDRESS_SERVER+" -p "+ Client.PORT_SERVER);
-            IceStorm.TopicManagerPrx topicManager = IceStorm.TopicManagerPrxHelper.checkedCast(obj.ice_timeout(1000));
-
-            if(topicManager == null)
-            {
-                Log.e("AsyncStreamThread", "invalid proxy");
-                return new Exception("Invalid Proxy");
+                Log.d("ClientFNF", e.getMessage());
+                throw e;
             }
-
-            IceStorm.TopicPrx topic = null;
-
-            while (topic == null)
+            catch (IOException e)
+            {
+                Log.d("ClientIO", e.getMessage());
+                throw e;
+            }
+            finally
             {
                 try
                 {
-                    topic = topicManager.retrieve("ArmarXSpeech");
+                    fis.close();
                 }
-                catch (IceStorm.NoSuchTopic ex)
+                catch (IOException ex)
                 {
-                    try
-                    {
-                        String err = (ex.getMessage()==null)?ex.toString():ex.getMessage();
-                        Log.e("NoSuchTopic:",err);
-                        topic = topicManager.create("ArmarXSpeech");
-                    }
-                    catch (IceStorm.TopicExists e)
-                    {
-                        String err = (e.getMessage()==null)?e.toString():e.getMessage();
-                        Log.e("TopicExists:",err);
-                    }
+                    ex.printStackTrace();
                 }
             }
 
-
-            Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
-            AsyncStreamingInterfacePrx audioStreamPrx = armarx.AsyncStreamingInterfacePrxHelper.uncheckedCast(pub);
-            if (audioStreamPrx == null)
-                throw new Error("Invalid proxy");
-
-            streamPartialFile(audioStreamPrx);
-        }
-        catch(Ice.TimeoutException te)
-        {
-            Log.e("ArmarXSpeech", te.toString());
-            return te;
-        }
-        catch(Ice.LocalException le)
-        {
-            Log.e("ArmarXSpeech", le.toString());
-            return le;
-        }
-        catch (Exception e)
-        {
-            Log.e("ArmarXSpeech", e.toString());
-            return e;
+            return null;
         }
 
-        if (ic != null)
+        @Override
+        protected Exception doInBackground(Void... params)
         {
-            // Clean up
             try
             {
-                ic.destroy();
+                //send messages through ChatCallbackI
+                System.out.print("Streaming audio file '"+filepath+"' ...");
+                streamPartialFile();
+                System.out.println("OK!");
+                return null;
             }
             catch (Exception e)
             {
-                Log.e("ArmarXSpeech", e.toString());
+                System.out.println("Failed!\nReason: "+e.getMessage());
+                e.printStackTrace();
+                return e;
             }
         }
 
-        return null;
-    }
 
-    @Override
-    protected void onPostExecute(final Exception result)
-    {
-        if (result != null)
+        @Override
+        protected void onPostExecute(final Exception result)
         {
-            if(result instanceof Ice.TimeoutException)
+            if (result != null)
             {
-                Toast.makeText(applicationContext, "Error: Server connection timed out. Please try again.",
-                        Toast.LENGTH_LONG).show();
-            }
-            else
-            {
-                Toast.makeText(applicationContext, "Error: "+ result.getMessage(),
-                        Toast.LENGTH_LONG).show();
+                _activity.runOnUiThread(new ConsoleWriter("Sorry, message could not be sent.\n"+result.getMessage()));
+                _scheduler.schedule(new Connector(), 2000, TimeUnit.MILLISECONDS);
             }
         }
-    }
-}
 
-class TextListenerThread implements Runnable
-{
-    String msg;
-
-    public TextListenerThread(Object parameter)
-    {
-        this.msg = (String)parameter;
-    }
-
-    public void run()
-    {
-        int status = 0;
-        Ice.Communicator communicator = null;
-        Ice.InitializationData initData = null;
-
-        try
+        private long getTimestamp()
         {
-            initData = new Ice.InitializationData();
-            communicator = Ice.Util.initialize(initData);
-
-            Log.d("Client Connection", "IP Server: "+Client.IP_ADDRESS_SERVER);
-            Ice.ObjectPrx obj = communicator.stringToProxy("IceStorm/TopicManager:tcp -p "+Client.PORT_SERVER+" -h "+Client.IP_ADDRESS_SERVER);
-            IceStorm.TopicManagerPrx topicManager = IceStorm.TopicManagerPrxHelper.checkedCast(obj);
-            IceStorm.TopicPrx topic = null;
-
-            while (topic == null) {
-                try {
-                    topic = topicManager.retrieve("ArmarXSpeechChat");
-                } catch (IceStorm.NoSuchTopic ex) {
-                    try {
-                        String err = (ex.getMessage()==null)?ex.toString():ex.getMessage();
-                        Log.e("NoSuchTopic:",err);
-                        topic = topicManager.create("ArmarXSpeechChat");
-                    } catch (IceStorm.TopicExists e) {
-                        String err = (e.getMessage()==null)?e.toString():e.getMessage();
-                        Log.e("TopicExists:",err);
-                    }
-                }
-            }
-
-            Ice.ObjectPrx pub = topic.getPublisher().ice_oneway();
-            TextListenerInterfacePrx textListener = TextListenerInterfacePrxHelper.uncheckedCast(pub);
-            textListener.reportText(msg, Client.getIPAddress(true));
-
-        }
-        catch (Ice.LocalException e) {
-            String err = (e.getMessage()==null)?e.toString():e.getMessage();
-            Log.e("LocalException",err);
-            status = 1;
-        } catch (Exception e) {
-            String err = (e.getMessage()==null)?e.toString():e.getMessage();
-            Log.e("Exception:",err);
-            status = 1;
-        }
-        if (communicator != null) {
-            // Clean up
-            //
-            try {
-                communicator.destroy();
-            } catch (Exception e) {
-                String err = (e.getMessage()==null)?e.toString():e.getMessage();
-                Log.e("Exception clean up:",err);
-                status = 1;
-            }
+            return System.currentTimeMillis();
         }
     }
+
 }

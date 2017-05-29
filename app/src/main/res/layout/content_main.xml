@@ -18,7 +18,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textSize="18dp"
-        android:text="Welcome to ArmarXSpeech!" />
+        android:text="@string/caption" />
 
     <TextView
         android:id="@+id/status"
@@ -28,6 +28,6 @@
         android:layout_below="@id/caption"
         android:textSize="18dp"
         android:textColor="@color/light_gray"
-        android:text="Press the button below to start the conversation." />
+        android:text="@string/initial_console" />
 
 </RelativeLayout>

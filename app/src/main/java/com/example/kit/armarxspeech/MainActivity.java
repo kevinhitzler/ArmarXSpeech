@@ -47,12 +47,6 @@ public class MainActivity extends AppCompatActivity
 {
     public static final String TAG = "ArmarXSpeech";
 
-    /* Named searches allow to quickly reconfigure the decoder */
-    private static final String KWS_SEARCH = "wakeup";
-
-    // used to activate armar speech recognition
-    private static final String KEYPHRASE = "OKAY ARMAR";
-
     // App permissions
     private static final int MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE = 0;
     private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
@@ -70,6 +64,7 @@ public class MainActivity extends AppCompatActivity
     private TextView warning_action;
     private Menu options_menu;
     private EditText cmd;
+    private Client _client;
 
 
     @Override
@@ -117,7 +112,10 @@ public class MainActivity extends AppCompatActivity
             {
                 //send msg to server
                 EditText cmd = ((EditText) findViewById(R.id.cmd));
-                Client.send(cmd.getText().toString());
+                if(_client.isReady())
+                {
+                    _client.sendTextMessage(cmd.getText().toString());
+                }
 
                 //reset text
                 ((EditText) findViewById(R.id.cmd)).setText("");
@@ -165,12 +163,12 @@ public class MainActivity extends AppCompatActivity
             }
         });
 
-        // Prepare the data for UI
-        captions = new HashMap<String, Integer>();
-        captions.put(KWS_SEARCH, R.string.kws_status);
-
         // Prepare recorder
         waveRecorder = new WaveRecorder();
+
+        // start client
+        _client = new Client(this);
+        _client.connect();
     }
 
     private void toggleFAB(FloatingActionButton fab)
@@ -312,9 +310,6 @@ public class MainActivity extends AppCompatActivity
             //stop recognizer
             isListening = true;
 
-            // change status
-            ((TextView) findViewById(R.id.status)).setText(getResources().getString(R.string.listening));
-
             // change color
             ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
             fab_micro.setBackgroundTintList(colorStateList);
@@ -331,8 +326,8 @@ public class MainActivity extends AppCompatActivity
 
 
         //send chunks
-        if (streamFile) {
-
+        if (streamFile)
+        {
             new AsyncTask<Void, Void, Exception>()
             {
                 @Override
@@ -349,7 +344,9 @@ public class MainActivity extends AppCompatActivity
                         buf.close();
 
                         //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
-                        Client.streamFile(getApplicationContext(), waveRecorder.getTempFile(), AudioEncoding.PCM, System.currentTimeMillis(), waveRecorder.getMinBufferSize());
+                        // Here it Is
+                        _client.streamAudioFile(waveRecorder.getTempFile(), AudioEncoding.PCM, waveRecorder.getMinBufferSize());
+                        //Client.streamFile(getApplicationContext(), waveRecorder.getTempFile(), AudioEncoding.PCM, System.currentTimeMillis(), waveRecorder.getMinBufferSize());
                     } catch (FileNotFoundException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
@@ -370,13 +367,10 @@ public class MainActivity extends AppCompatActivity
             fab_micro.setBackgroundTintList(colorStateList);
         }
 
-        String caption = getResources().getString(captions.get(KWS_SEARCH));
-        ((TextView) findViewById(R.id.status)).setText(caption);
-
         isListening = false;
     }
 
-    public void showMessageToUser(String text)
+    public void printToConsole(String text)
     {
         ((TextView) findViewById(R.id.status)).setText(text);
     }
@@ -420,10 +414,12 @@ public class MainActivity extends AppCompatActivity
             dialog.setContentView(R.layout.settings_dialog);
 
             final EditText editTextIP = (EditText) dialog.findViewById(R.id.editTextIP);
-            editTextIP.setText(Client.IP_ADDRESS_SERVER);
+            //Here it is
+            //editTextIP.setText(Client.IP_ADDRESS_SERVER);
 
             final EditText editTextPort = (EditText) dialog.findViewById(R.id.editTextPort);
-            editTextPort.setText(Client.PORT_SERVER);
+            // Here it is
+            //editTextPort.setText(Client.PORT_SERVER);
 
             // ok button
             Button okBtn = (Button) dialog.findViewById(R.id.btnSettingsOK);
@@ -431,8 +427,9 @@ public class MainActivity extends AppCompatActivity
             okBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    Client.IP_ADDRESS_SERVER = editTextIP.getText().toString();
-                    Client.PORT_SERVER = editTextPort.getText().toString();
+                    // Here it is 2
+                    //Client.IP_ADDRESS_SERVER = editTextIP.getText().toString();
+                    //Client.PORT_SERVER = editTextPort.getText().toString();
                     dialog.dismiss();
                 }
             });

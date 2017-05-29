@@ -24,10 +24,10 @@
 #define _ARMARX_ROBOTAPI_SPEECH_INTERFACE_SLICE_
 
 #include <Ice/BuiltinSequences.ice>
+#include <Glacier2/Session.ice>
 
 module armarx
 {
-
     /*!
      * \brief Enumeration used to specify the encoding used when passing audio chunks.
      */
@@ -39,74 +39,22 @@ module armarx
     sequence<byte> AudioChunk;
 
     /*!
-     * \brief Interface implemented by components that provide an audio stream to ArmarX (e.g. by capturing from a microphone).
+     * \brief Interface implemented by components that provide callbacks for server to client communication
      */
-    interface AudioStreamProducerInterface
+    interface ChatCallback
     {
-        /*!
-         * \brief Called to publish a chunk of audio data for further processing.
-         * \param data Audio data.
-         * \param encoding Audio encoding which is used for data.
-         * \param timestamp Timestamp, currently local time of the producer (should be refined).
-         */
-        void publishAudioChunk(AudioChunk data, AudioEncoding encoding, long timestamp);
-    };
-
-    interface AsyncStreamingInterface
-    {
-        void sendChunkAsync(int offset, AudioChunk data, int minBufferSize, AudioEncoding encoding, long timestamp, bool isNewSentence, string ip);
+        void send(long timestamp, string name, string message);
     };
 
     /*!
-     * \brief Interface implemented by components that use an audio stream (e.g. for running an ASR system).
+     * \brief Interface implemented by components that provide an audio and text stream to ArmarX (e.g. by capturing from a microphone).
      */
-    interface AudioStreamConsumerInterface
+	interface ChatSession extends Glacier2::Session
     {
-        /*!
-         * \brief Callback method that is called when a chunk of audio data has been published.
-         * \param data Audio data.
-         * \param encoding Audio encoding which is used for data.
-         * \param timestamp Timestamp, currently local time of the producer (should be refined).
-         */
-        void processAudioChunk(AudioChunk data, AudioEncoding encoding, long timestamp);
+        void setCallback(ChatCallback* cb);
+        void sendText(long timestamp, string name, string message);
+        void sendChunkAsync(int offset, AudioChunk data, int minBufferSize, AudioEncoding encoding, long timestamp, bool isNewSentence);
     };
-
-    /*!
-     * \brief Interface implemented by components that use a text stream (e.g. for running a dialog system).
-     */
-    interface TextListenerInterface
-    {
-        /*!
-         * \brief Callback method that is called when a piece of text has been published.
-         * \param text Text.
-         */
-        void reportText(string text, string ip);
-
-    };
-
-    /*!
-    * \brief Interface implemented by components that use a text stream (e.g. for running a dialog system).
-    */
-    interface TextResponderInterface
-    {
-        /*!
-         * \brief Callback method that is called when a piece of text has been published.
-         * \param text Text.
-         */
-        void sendText(string text);
-    };
-
-    enum FeedbackType
-    {
-        eFeedbackKnow,
-        eFeedbackAgree
-    };
-
-    interface FeedbackPublisherInterface
-    {
-        void publishFeedback(FeedbackType type, bool sign);
-    };
-
 };
 
 #endif
