@@ -9,4 +9,10 @@
     <color name="orange">#ff9e40</color>
     <color name="red">#ff4340</color>
     <color name="light_gray">#ababab</color>
+    <color name="green">#81C784</color>
+
+    <!-- Chat -->
+    <color name="chat_msg_tv">#4e4e4e</color>
+    <color name="menu_gray">#6f6f6f</color>
+
 </resources>

@@ -6,10 +6,12 @@
 
     <string name="warning_muted">Speech activation service muted.</string>
     <string name="action_settings">Settings</string>
-    <string name="action_undo"><u>UNDO</u></string>
+    <string name="action_undo"><u>OK</u></string>
+    <string name="prompt_press_button">Please hold the button pressed while speaking to the robot.</string>
     <string name="ok">OK</string>
-    <string name="initial_console"></string>
+    <string name="initial_console">Initialized GUI.</string>
     <string name="caption">Welcome to ArmarXSpeech!</string>
+    <string name="inform_mic_muted">Your microphone is muted. Please activate it in the settings first.</string>
 
     <string name="permission_write_external_storage_rationale">We need your permission to write audio chunks to your phone.</string>
     <string name="permission_record_audio_rationale">We need your permission to record audio and send it to the robot.</string>

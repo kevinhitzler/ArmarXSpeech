@@ -75,7 +75,7 @@ public class WaveRecorder {
 
         File tempFile = new File(filepath,AUDIO_RECORDER_TEMP_FILE);
         String path = file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE;
-        Log.i(TAG, "getTempFilenameAndDeleteOld(): "+path);
+        Log.i(TAG, "getTempFile: "+path);
 
         return path;
     }
@@ -92,7 +92,7 @@ public class WaveRecorder {
 
         File tempFile = new File(filepath,AUDIO_RECORDER_TEMP_FILE);
         String path = file.getAbsolutePath() + "/" + AUDIO_RECORDER_TEMP_FILE;
-        Log.i(TAG, "getTempFilenameAndDeleteOld(): "+path);
+        Log.i(TAG, "deleteTempFile(): "+path);
 
         if (tempFile.exists())
             tempFile.delete();
@@ -103,18 +103,30 @@ public class WaveRecorder {
        return bufferSize;
     }
 
-    public void startRecording() {
-        recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
-                RECORDER_SAMPLERATE,
-                RECORDER_CHANNELS,
-                RECORDER_AUDIO_ENCODING,
-                bufferSize);
-        int i = recorder.getState();
-        if (i==1)
-            recorder.startRecording();
+    public void startRecording()
+    {
+        try
+        {
+            recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
+                    RECORDER_SAMPLERATE,
+                    RECORDER_CHANNELS,
+                    RECORDER_AUDIO_ENCODING,
+                    bufferSize);
+            int i = recorder.getState();
+            if (i==1)
+            {
+                recorder.startRecording();
+                Log.d("WaveRecorder","Started recording...");
+            }
+        }
+        catch (Exception e)
+        {
+            Log.e("WaveRecorder", "Could not initialize recorder: "+e.getMessage());
+            e.printStackTrace();
+            return;
+        }
 
         isRecording = true;
-
         recordingThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -125,36 +137,62 @@ public class WaveRecorder {
         recordingThread.start();
     }
 
-    private void writeAudioDataToFile() {
+    private void writeAudioDataToFile()
+    {
         byte data[] = new byte[bufferSize];
         String filename = getTempFilenameAndDeleteOld();
 
         FileOutputStream os = null;
 
-        try {
+        try
+        {
             os = new FileOutputStream(filename);
-        } catch (FileNotFoundException e) {
-            // TODO Auto-generated catch block
+        }
+        catch (FileNotFoundException e)
+        {
             e.printStackTrace();
         }
 
         int read = 0;
-        if (null != os) {
-            while(isRecording) {
-                read = recorder.read(data, 0, bufferSize);
-                if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                    try {
-                        //Log.d("WaveRecorder", "Writing data...");
+        int fileSize = 0;
+        if (null != os)
+        {
+            while(isRecording)
+            {
+                try
+                {
+                    read = recorder.read(data, 0, bufferSize);
+                }
+                catch (Exception e)
+                {
+                    Log.e("WaveRecorder", "Could not read from recorder: "+e.getMessage());
+                    e.printStackTrace();
+                    isRecording = false;
+                    break;
+                }
+
+                if (AudioRecord.ERROR_INVALID_OPERATION != read)
+                {
+                    try
+                    {
+                        fileSize += data.length;
                         os.write(data);
-                    } catch (IOException e) {
+                    }
+                    catch (IOException e)
+                    {
                         e.printStackTrace();
                     }
                 }
             }
 
-            try {
+            Log.d("WaveRecorder", "File writing finished: "+fileSize);
+
+            try
+            {
                 os.close();
-            } catch (IOException e) {
+            }
+            catch (IOException e)
+            {
                 e.printStackTrace();
             }
         }
@@ -174,20 +212,19 @@ public class WaveRecorder {
 
     public void stopRecording()
     {
+        isRecording = false;
         if (recorder != null)
         {
-            isRecording = false;
             int i = recorder.getState();
             if (i==1)
+            {
                 recorder.stop();
+            }
 
             recorder.release();
             recorder = null;
             recordingThread = null;
         }
-
-        // we are using raw pcm data
-        //copyWaveFile(getTempFilenameAndDeleteOld(),getFilename());
     }
 
     private void copyWaveFile(String inFilename,String outFilename){

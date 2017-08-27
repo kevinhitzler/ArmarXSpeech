@@ -1,15 +1,15 @@
 package com.example.kit.armarxspeech;
+import android.content.Context;
 import android.os.AsyncTask;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.LinkedList;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import Glacier2.SessionHelper;
 import Glacier2.SessionNotExistException;
@@ -25,23 +25,127 @@ import armarx.ChatSessionPrxHelper;
  */
 public class Client
 {
-    public static String SERVER_IP = "192.168.43.48";
+    public static final int RECONNECT_DELAY_TIME = 5000;
+    public static String SERVER_IP = "192.168.43.64";
     public static String SERVER_PORT = "80";
 
-    private boolean _isReady;
     private MainActivity _activity;
-    private final ScheduledExecutorService _scheduler;
     private Ice.Communicator _communicator;
     private Glacier2.SessionHelper _session;
     private Glacier2.SessionFactoryHelper _factory;
     private Ice.InitializationData _initData;
     private ChatSessionPrx _chat;
+    private ChatManager _chatManager;
+    private ReconnectorTask _reconnector;
+    private boolean isInitialized;
 
     public Client(MainActivity activity)
     {
-        _isReady = false;
         _activity = activity;
-        _scheduler = Executors.newScheduledThreadPool(1);
+        isInitialized = false;
+
+        // Tell ChatManager what to do on send/stream
+        _chatManager = new ChatManager(new ChatManagerInterface()
+        {
+            @Override
+            public void sendText(String msg)
+            {
+                // create new async thread to send message
+                new TextReporter(msg).execute();
+            }
+
+            @Override
+            public void streamAudio(AudioData data)
+            {
+                // create new async thread to send message
+                new AsyncStreamThread(data.getFilePath(), data.getEncoding(),
+                        data.getMinBufferSize()).execute();
+            }
+        });
+
+        // Create task for holding connection
+        _reconnector = new ReconnectorTask(new ReconnectorTaskInterface()
+        {
+            @Override
+            public void reconnectToServer()
+            {
+                if(!isInitialized)
+                {
+                    initialize();
+                }
+
+                // reconnect and do remaining work
+                connectToServer();
+            }
+
+            @Override
+            public boolean isConnected()
+            {
+                if(_chat != null)
+                {
+                    try
+                    {
+                        _chat.ice_isA(ChatCallbackPrxHelper.ice_staticId());
+                        return true;
+                    }
+                    catch (Ice.TimeoutException te)
+                    {
+                        te.printStackTrace();
+                        return false;
+                    }
+                    catch (Exception e)
+                    {
+                        e.printStackTrace();
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        });
+    }
+
+    public void connect()
+    {
+        if(!_reconnector.isRunning())
+        {
+            System.out.println("Reconnector is not running...");
+            _reconnector.reconnect(RECONNECT_DELAY_TIME);
+        }
+    }
+
+    public void sendTextMessage(String message)
+    {
+        _chatManager.enqueueAndSendText(message);
+
+    }
+
+    public void streamAudioFile(String filepath, AudioEncoding encoding, int minBufferSize)
+    {
+        AudioData ad = new AudioData(filepath, encoding, minBufferSize);
+        _chatManager.enqueueAndStreamAudio(ad);
+    }
+
+    public void shutdown()
+    {
+        isInitialized = false;
+        if (_communicator != null)
+        {
+            try
+            {
+                System.out.println("----------------------------------------");
+                System.out.print("I am done, destroying communicator...");
+                _communicator.destroy();
+                System.out.print("OK!");
+            }
+            catch (Exception e)
+            {
+                System.out.println("Session could not be destroyed. Exit.");
+                System.out.println(e.getMessage());
+            }
+        }
     }
 
     private void initialize()
@@ -78,10 +182,14 @@ public class Client
                         }
 
                         System.out.println("Connected to Glacier2 Service. OK!");
-                        _activity.runOnUiThread(new ConsoleWriter("Please press the button below to start."));
+                        _activity.runOnUiThread(new InfoWriter("Connected. I am ready!", ContextCompat.getColor(_activity,R.color.green)));
 
                         registerChatCallback();
-                        ready();
+
+                        if(_chatManager.hasRemaining())
+                        {
+                            _chatManager.doRemainingWork();
+                        }
                     }
 
                     @Override
@@ -120,8 +228,8 @@ public class Client
                             ex.printStackTrace();
                         }
 
-                        // show user error & retry with scheduler
-                        _scheduler.schedule(new Connector(), 2000, TimeUnit.MILLISECONDS);
+                        // show user error & retry
+                        connect();
                     }
 
                     @Override
@@ -133,67 +241,16 @@ public class Client
                         }
                     }
                 });
+    }
 
+    private void connectToServer()
+    {
         // Connect to session
         System.out.print("Trying to connect to Session ...");
-        _activity.runOnUiThread(new ConsoleWriter("Trying to connect to '"+SERVER_IP+":"+SERVER_PORT+"'"));
+        _activity.runOnUiThread(new InfoWriter("Trying to connect to '"+SERVER_IP+":"+SERVER_PORT+"'", ContextCompat.getColor(_activity,R.color.orange)));
 
         _factory.setRouterHost(SERVER_IP);
         _session = _factory.connect("", "");
-    }
-
-    public void connect()
-    {
-        _scheduler.schedule(new Connector(), 0, TimeUnit.MILLISECONDS);
-    }
-
-    public boolean isReady()
-    {
-        return _isReady;
-    }
-
-    public void sendTextMessage(String message)
-    {
-        // create new async thread to send message
-        new TextReporter(message).execute();
-    }
-
-    public void streamAudioFile(String filepath, AudioEncoding encoding, int minBufferSize)
-    {
-        try
-        {
-            // create new async thread to send message
-
-            new AsyncStreamThread(filepath, encoding, minBufferSize).execute();
-            System.out.println("OK!");
-        }
-        catch (Exception e)
-        {
-            System.out.println("Failed!");
-            System.out.println("Reason: "+e.getMessage());
-            e.printStackTrace();
-            System.out.println("Exit.");
-        }
-    }
-
-    public void shutdown()
-    {
-        if (_communicator != null)
-        {
-            try
-            {
-                System.out.println("----------------------------------------");
-                System.out.print("I am done, destroying communicator...");
-                _isReady = false;
-                _communicator.destroy();
-                System.out.print("OK!");
-            }
-            catch (Exception e)
-            {
-                System.out.println("Session could not be destroyed. Exit.");
-                System.out.println(e.getMessage());
-            }
-        }
     }
 
     private void registerChatCallback()
@@ -202,7 +259,7 @@ public class Client
         {
             // register callback
             System.out.print("Trying to register ChatCallback...");
-            ChatCallbackPrx callback = ChatCallbackPrxHelper.uncheckedCast(_session.addWithUUID(new ChatCallbackI()));
+            ChatCallbackPrx callback = ChatCallbackPrxHelper.uncheckedCast(_session.addWithUUID(new ChatCallbackI(_activity)));
             _chat = ChatSessionPrxHelper.uncheckedCast(_session.session());
             _chat.setCallback(callback);
             System.out.println("OK!\n");
@@ -214,12 +271,6 @@ public class Client
         }
     }
 
-    private void ready()
-    {
-        System.out.println("I am ready!");
-        _isReady = true;
-    }
-
     private class TextReporter extends AsyncTask<Void, Void, Exception>
     {
         String _msg;
@@ -227,11 +278,6 @@ public class Client
         public TextReporter(Object msg)
         {
             _msg = (String) msg;
-        }
-
-        private long getTimestamp()
-        {
-            return System.currentTimeMillis();
         }
 
         @Override
@@ -258,42 +304,25 @@ public class Client
         {
             if (result != null)
             {
-                _activity.runOnUiThread(new ConsoleWriter("Sorry, message could not be sent.\n"+result.getMessage()));
-                _scheduler.schedule(new Connector(), 2000, TimeUnit.MILLISECONDS);
+                //_activity.runOnUiThread(new InfoWriter("Sorry, message could not be sent. Trying to reconnect ...", Color.RED));
+                _chatManager.enqueue(_msg);
+                connect();
             }
         }
-    }
 
-    class ConsoleWriter implements Runnable
-    {
-        String _msg;
+        private long getTimestamp()
+        {
+            return System.currentTimeMillis();
+        }
 
-        ConsoleWriter(String msg)
-        {
-            _msg = msg;
-        }
-        @Override
-        public void run()
-        {
-            _activity.printToConsole(_msg);
-        }
-    }
-
-    class Connector implements Runnable
-    {
-        @Override
-        public void run()
-        {
-            initialize();
-        }
     }
 
     class AsyncStreamThread extends AsyncTask<Void, Void, Exception>
     {
-        String filepath;
-        AudioEncoding encoding;
-        int minBufferSize;
-        Glacier2.SessionHelper _session;
+        private String filepath;
+        private AudioEncoding encoding;
+        private int minBufferSize;
+        private Glacier2.SessionHelper _session;
 
         public AsyncStreamThread(String filepath, AudioEncoding encoding, int minBufferSize)
         {
@@ -302,15 +331,24 @@ public class Client
             this.minBufferSize = minBufferSize;
         }
 
-        private byte[] streamPartialFile() throws Exception
+        private void streamPartialFile() throws Exception
         {
             File file = null;
             FileInputStream fis = null;
+            boolean hasErrors = false;
+
             try
             {
                 boolean isNewSentence = true;
                 file = new File(filepath);
                 fis = new FileInputStream(file);
+
+                if(file.length() <= minBufferSize)
+                {
+                    Log.w("Client", "File size smaller than minbuffer: "+file.length()+" < "+minBufferSize);
+                    Log.w("Client", "Canceling streaming operation.");
+                    throw new Exception("File size to small for Streaming");
+                }
 
                 final int chunkSize = 1024*10;
                 byte[] byteSeq; /* = new byte[chunkSize];*/
@@ -326,44 +364,28 @@ public class Client
                     offset = fis.read(byteSeq);
 
                     // Send up to numRequests + 1 chunks asynchronously.
-                    Ice.AsyncResult r = _chat.begin_sendChunkAsync(offset, byteSeq, minBufferSize, AudioEncoding.PCM, System.currentTimeMillis(), isNewSentence);
+                    _chat.sendChunkAsync(offset, byteSeq, minBufferSize, AudioEncoding.PCM, System.currentTimeMillis(), isNewSentence);
                     isNewSentence = false;
-
-
-                    // Wait until this request has been passed to the transport.
-                    r.waitForSent();
-                    results.add(r);
-
-                    // Once there are more than numRequests, wait for the least
-                    // recent one to complete.
-                    while (results.size() > numRequests)
-                    {
-                        Ice.AsyncResult re = results.getFirst();
-                        results.removeFirst();
-                        re.waitForCompleted();
-                    }
                 }
 
-                // Wait for any remaining requests to complete.
-            /*
-            while (results.size() > 0) {
-                Ice.AsyncResult res = results.getFirst();
-                results.removeFirst();
-                res.waitForCompleted();
-            }*/
-
                 fis.close();
-                WaveRecorder.deleteTempFile();
+                //WaveRecorder.deleteTempFile();
             }
             catch (FileNotFoundException e)
             {
+                hasErrors = true;
                 Log.d("ClientFNF", e.getMessage());
                 throw e;
             }
             catch (IOException e)
             {
+                hasErrors = true;
                 Log.d("ClientIO", e.getMessage());
                 throw e;
+            }
+            catch (Exception e)
+            {
+                Log.d("Client", e.getMessage());
             }
             finally
             {
@@ -377,7 +399,7 @@ public class Client
                 }
             }
 
-            return null;
+            return;
         }
 
         @Override
@@ -405,8 +427,13 @@ public class Client
         {
             if (result != null)
             {
-                _activity.runOnUiThread(new ConsoleWriter("Sorry, message could not be sent.\n"+result.getMessage()));
-                _scheduler.schedule(new Connector(), 2000, TimeUnit.MILLISECONDS);
+                //_activity.runOnUiThread(new InfoWriter("Sorry, audio could not be streamed. Trying to reconnect ...", ));
+                _chatManager.enqueue(new AudioData(filepath, encoding, minBufferSize));
+                connect();
+            }
+            else
+            {
+                WaveRecorder.deleteTempFile();
             }
         }
 
@@ -416,4 +443,20 @@ public class Client
         }
     }
 
+    private class InfoWriter implements Runnable
+    {
+        String _msg;
+        int _color;
+
+        InfoWriter(String msg, int bgColor)
+        {
+            _msg = msg;
+            _color = bgColor;
+        }
+        @Override
+        public void run()
+        {
+            _activity.printToInfoBar(_msg, _color);
+        }
+    }
 }

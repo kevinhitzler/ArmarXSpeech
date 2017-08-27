@@ -2,19 +2,25 @@ package com.example.kit.armarxspeech;
 
 import android.Manifest;
 import android.app.Dialog;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
-import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
-import android.media.MediaPlayer;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Environment;
+import android.os.Handler;
+import android.support.design.widget.CoordinatorLayout;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Vibrator;
+import android.speech.tts.TextToSpeech;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AlertDialog;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -31,14 +37,22 @@ import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+
 import armarx.AudioEncoding;
 
 
@@ -50,21 +64,29 @@ public class MainActivity extends AppCompatActivity
     // App permissions
     private static final int MY_PERMISSIONS_REQUEST_WRITE_EXTERNAL_STORAGE = 0;
     private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 1;
+    private static final int MIN_BUTTON_PRESS_TIME = 200;
+    private long fab_microPressedStartTime;
 
     public static int N_TASKS = 0;
     private static boolean isListening = false;
-    private static boolean isMuted = false;
+    public boolean isMuted = false;
 
     private long lastTime = 0;
     private WaveRecorder waveRecorder;
     private HashMap<String, Integer> captions;
     private static String mFileName = null;
     private FloatingActionButton fab_micro, fab_send;
-    private LinearLayout warning_bar;
-    private TextView warning_action;
+    private LinearLayout info_bar;
+    private TextView info_text;
+    private TextView info_action;
     private Menu options_menu;
     private EditText cmd;
     private Client _client;
+    private ScrollView scroll_view_chat;
+    private TextToSpeech text_to_speech;
+    private ChatAdapter listAdapter;
+    private ListView mainListView;
+    private CoordinatorLayout coordinatorLayout;
 
 
     @Override
@@ -78,11 +100,14 @@ public class MainActivity extends AppCompatActivity
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
                 this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
-        drawer.setDrawerListener(toggle);
+
+        drawer.addDrawerListener(toggle);
         toggle.syncState();
 
         NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
+
+        coordinatorLayout = (CoordinatorLayout) findViewById(R.id.coordinatorLayout);
 
         fab_micro = (FloatingActionButton) findViewById(R.id.fab_micro);
         fab_micro.setOnTouchListener(new View.OnTouchListener() {
@@ -92,12 +117,41 @@ public class MainActivity extends AppCompatActivity
         {
             if(event.getAction() == MotionEvent.ACTION_DOWN)
             {
-                startListenX();
+                // change color
+                ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
+                fab_micro.setBackgroundTintList(colorStateList);
+
+                // activate haptic feedback
                 Vibrator vb = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
                 vb.vibrate(70);
+
+                // set starttime for button press
+                fab_microPressedStartTime = System.currentTimeMillis();
+
+                // check if thread is still running
+                if(!isListening)
+                {
+                    startListenX();
+                }
+
             }
             if(event.getAction() == MotionEvent.ACTION_UP)
             {
+                //change color
+                ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
+                if(fab_micro != null)
+                {
+                    fab_micro.setBackgroundTintList(colorStateList);
+                }
+
+                // check how long button was pressed
+                long fab_microPressedTime = System.currentTimeMillis() - fab_microPressedStartTime;
+                if(fab_microPressedTime < MIN_BUTTON_PRESS_TIME)
+                {
+                    Toast.makeText(getApplicationContext(),getResources().
+                            getText(R.string.prompt_press_button), Toast.LENGTH_SHORT).show();
+                }
+
                 stopListenX(true);
             }
             return true;
@@ -112,10 +166,7 @@ public class MainActivity extends AppCompatActivity
             {
                 //send msg to server
                 EditText cmd = ((EditText) findViewById(R.id.cmd));
-                if(_client.isReady())
-                {
-                    _client.sendTextMessage(cmd.getText().toString());
-                }
+                _client.sendTextMessage(cmd.getText().toString());
 
                 //reset text
                 ((EditText) findViewById(R.id.cmd)).setText("");
@@ -148,27 +199,53 @@ public class MainActivity extends AppCompatActivity
             }
         });
 
-        warning_bar = (LinearLayout) findViewById(R.id.warning_bar);
-        warning_action = (TextView) findViewById(R.id.warning_action);
-        warning_action.setOnClickListener(new View.OnClickListener()
+        info_bar = (LinearLayout) findViewById(R.id.info_bar);
+        info_text = (TextView) findViewById(R.id.info_text);
+        info_action = (TextView) findViewById(R.id.info_action);
+        info_action.setOnClickListener(new View.OnClickListener()
         {
             @Override
             public void onClick(View v)
             {
-                // stop muting
-                isMuted = false;
-                warning_bar.setVisibility(View.GONE);
-                MenuItem action_mute = (MenuItem) options_menu.findItem(R.id.action_mute);
-                action_mute.setChecked(false);
+                info_bar.setVisibility(View.GONE);
             }
         });
+
+        scroll_view_chat = (ScrollView) findViewById(R.id.scroller_chat);
+        text_to_speech = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener()
+        {
+            @Override
+            public void onInit(int status)
+            {
+                if(status != TextToSpeech.ERROR) {
+                    text_to_speech.setLanguage(Locale.ENGLISH);
+                }
+            }
+        });
+
+        // initialize chat
+        mainListView = (ListView) findViewById(R.id.mainListView);
+        List<ChatMessage> chatMessages = new ArrayList<ChatMessage>();
+        listAdapter = new ChatAdapter(this, chatMessages, mainListView);
+        mainListView.setAdapter( listAdapter);
+
 
         // Prepare recorder
         waveRecorder = new WaveRecorder();
 
         // start client
+        startClient();
+    }
+
+    private void startClient()
+    {
         _client = new Client(this);
         _client.connect();
+    }
+
+    public TextToSpeech getTextToSpeach()
+    {
+        return text_to_speech;
     }
 
     private void toggleFAB(FloatingActionButton fab)
@@ -201,7 +278,7 @@ public class MainActivity extends AppCompatActivity
         }
         else
         {
-            // Write External Storage permissions is already available, show the camera preview.
+            // Write External Storage permissions is already available
             Log.i(TAG, "WRITE_EXTERNAL_STORAGE permission has already been granted.");
             WRITE_EXTERNAL_STORAGE_GRANTED = true;
         }
@@ -243,7 +320,7 @@ public class MainActivity extends AppCompatActivity
             // For example if the user has previously denied the permission.
             Log.i(TAG, "Displaying write external storage permission rationale to provide additional context.");
 
-            Snackbar.make(warning_bar, R.string.permission_write_external_storage_rationale,
+            Snackbar.make(coordinatorLayout, R.string.permission_write_external_storage_rationale,
                     Snackbar.LENGTH_INDEFINITE)
                     .setAction(R.string.ok, new View.OnClickListener() {
                         @Override
@@ -275,7 +352,7 @@ public class MainActivity extends AppCompatActivity
             // For example if the user has previously denied the permission.
             Log.i(TAG, "Displaying record audio storage permission rationale to provide additional context.");
 
-            Snackbar.make(warning_bar, R.string.permission_record_audio_rationale,
+            Snackbar.make(coordinatorLayout, R.string.permission_record_audio_rationale,
                     Snackbar.LENGTH_INDEFINITE)
                     .setAction(R.string.ok, new View.OnClickListener() {
                         @Override
@@ -307,51 +384,46 @@ public class MainActivity extends AppCompatActivity
     {
         if(allPermissionsGranted() == true)
         {
-            //stop recognizer
+            Log.d("MainActivity", "Starting to listen...");
             isListening = true;
 
-            // change color
-            ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.orange);
-            fab_micro.setBackgroundTintList(colorStateList);
-
-            //start listening
+                //start listening
             waveRecorder.startRecording();
         }
     }
 
     private void stopListenX(boolean streamFile)
     {
-        // stop recording
-        waveRecorder.stopRecording();
+        // check if it was listened
+        if(!isListening)
+        {
+            Log.d("MainActivity", "Cannot stop listening, because i did not listen before...");
+            return;
+        }
 
+        Log.d("MainActivity", "Stopping to listen...");
+        waveRecorder.stopRecording();
 
         //send chunks
         if (streamFile)
         {
-            new AsyncTask<Void, Void, Exception>()
-            {
+            new AsyncTask<Void, Void, Exception>() {
                 @Override
-                protected Exception doInBackground(Void... params)
-                {
+                protected Exception doInBackground(Void... params) {
                     File file = new File(waveRecorder.getTempFile());
 
                     int size = (int) file.length();
-                    Log.d("MainActivity", "Get File: "+file.getAbsolutePath()+", Size: "+size);
+                    Log.d("MainActivity", "Get File: " + file.getAbsolutePath() + ", Size: " + size);
                     byte[] bytes = new byte[size];
                     try {
                         BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
                         buf.read(bytes, 0, bytes.length);
                         buf.close();
 
-                        //Client.sendFile(bytes, AudioEncoding.PCM, System.currentTimeMillis());
-                        // Here it Is
                         _client.streamAudioFile(waveRecorder.getTempFile(), AudioEncoding.PCM, waveRecorder.getMinBufferSize());
-                        //Client.streamFile(getApplicationContext(), waveRecorder.getTempFile(), AudioEncoding.PCM, System.currentTimeMillis(), waveRecorder.getMinBufferSize());
                     } catch (FileNotFoundException e) {
-                        // TODO Auto-generated catch block
                         e.printStackTrace();
                     } catch (IOException e) {
-                        // TODO Auto-generated catch block
                         e.printStackTrace();
                     }
 
@@ -360,19 +432,28 @@ public class MainActivity extends AppCompatActivity
             }.execute();
         }
 
-        //change color
-        ColorStateList colorStateList = ContextCompat.getColorStateList(getApplicationContext(), R.color.colorAccent);
-        if(fab_micro != null)
-        {
-            fab_micro.setBackgroundTintList(colorStateList);
-        }
-
         isListening = false;
+        Log.d("MainActivity", "Stopped listening.");
     }
 
-    public void printToConsole(String text)
+    public void printToInfoBar(String text, int backgroundColor)
     {
-        ((TextView) findViewById(R.id.status)).setText(text);
+        info_bar.setBackgroundColor(backgroundColor);
+        info_text.setText(text);
+        info_bar.setVisibility(View.VISIBLE);
+    }
+
+    public void printToChat(long timestamp, String name, String message)
+    {
+        //ChatMessage(int messageType, String messageID, String message, String partnerID, String ownDeviceID)
+        boolean isMine = (name.equals("ArmarX")) ? false : true;
+        ChatMessage friendsMessage = new ChatMessage(ChatMessage.MESSAGE_TYPE_NORMAL_CHATMESSAGE, "0", message, "1", "12345", ArmarXUtils.convertTime(timestamp), isMine);
+        listAdapter.add(friendsMessage);
+
+        if(!isMine)
+        {
+            mainListView.smoothScrollToPosition(listAdapter.getCount()-1);
+        }
     }
 
     @Override
@@ -414,12 +495,10 @@ public class MainActivity extends AppCompatActivity
             dialog.setContentView(R.layout.settings_dialog);
 
             final EditText editTextIP = (EditText) dialog.findViewById(R.id.editTextIP);
-            //Here it is
-            //editTextIP.setText(Client.IP_ADDRESS_SERVER);
+            editTextIP.setText(Client.SERVER_IP);
 
             final EditText editTextPort = (EditText) dialog.findViewById(R.id.editTextPort);
-            // Here it is
-            //editTextPort.setText(Client.PORT_SERVER);
+            editTextPort.setText(Client.SERVER_PORT);
 
             // ok button
             Button okBtn = (Button) dialog.findViewById(R.id.btnSettingsOK);
@@ -428,8 +507,9 @@ public class MainActivity extends AppCompatActivity
                 @Override
                 public void onClick(View v) {
                     // Here it is 2
-                    //Client.IP_ADDRESS_SERVER = editTextIP.getText().toString();
-                    //Client.PORT_SERVER = editTextPort.getText().toString();
+                    Client.SERVER_IP = editTextIP.getText().toString();
+                    Client.SERVER_PORT = editTextPort.getText().toString();
+                    startClient();
                     dialog.dismiss();
                 }
             });
@@ -453,17 +533,25 @@ public class MainActivity extends AppCompatActivity
         {
             if(item.isChecked())
             {
+                item.setChecked(false);
+
                 // stop muting
                 isMuted = false;
-                warning_bar.setVisibility(View.GONE);
-                item.setChecked(false);
+                printToInfoBar("Voice activated.", ContextCompat.getColor(this, R.color.green));
             }
             else
             {
+                item.setChecked(true);
+
                 // start muting
                 isMuted = true;
-                warning_bar.setVisibility(View.VISIBLE);
-                item.setChecked(true);
+                printToInfoBar("Voice muted.", ContextCompat.getColor(this, R.color.orange));
+
+                TextToSpeech tts = getTextToSpeach();
+                if(tts.isSpeaking())
+                {
+                    tts.stop();
+                }
             }
 
             return true;
@@ -472,24 +560,100 @@ public class MainActivity extends AppCompatActivity
         return super.onOptionsItemSelected(item);
     }
 
+    public static Bitmap getScreenShot(View view) {
+        View screenView = view.getRootView();
+        screenView.setDrawingCacheEnabled(true);
+        Bitmap bitmap = Bitmap.createBitmap(screenView.getDrawingCache());
+        screenView.setDrawingCacheEnabled(false);
+        return bitmap;
+    }
+
+    public static void store(Bitmap bm, String fileName){
+        final String dirPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Screenshots";
+        File dir = new File(dirPath);
+        if(!dir.exists())
+            dir.mkdirs();
+        File file = new File(dirPath, fileName);
+        try {
+            FileOutputStream fOut = new FileOutputStream(file);
+            bm.compress(Bitmap.CompressFormat.PNG, 85, fOut);
+            fOut.flush();
+            fOut.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void shareImage(File file){
+        Uri uri = Uri.fromFile(file);
+        Intent intent = new Intent();
+        intent.setAction(Intent.ACTION_SEND);
+        intent.setType("image/*");
+
+        intent.putExtra(android.content.Intent.EXTRA_SUBJECT, "");
+        intent.putExtra(android.content.Intent.EXTRA_TEXT, "");
+        intent.putExtra(Intent.EXTRA_STREAM, uri);
+        try {
+            startActivity(Intent.createChooser(intent, "Share Screenshot"));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this.getApplicationContext(), "No App Available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+
     @SuppressWarnings("StatementWithEmptyBody")
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
         // Handle navigation view item clicks here.
         int id = item.getItemId();
 
-        if (id == R.id.nav_camera) {
-            // Handle the camera action
-        } else if (id == R.id.nav_gallery) {
+        if (id == R.id.nav_aboutus)
+        {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://h2t.anthropomatik.kit.edu/"));
+            startActivity(browserIntent);
+        }
+        else if (id == R.id.nav_aboutArmarX)
+        {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://armarx.humanoids.kit.edu/"));
+            startActivity(browserIntent);
+        }
+        else if (id == R.id.nav_share)
+        {
+            // close menu
+            DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+            drawer.closeDrawers();
 
-        } else if (id == R.id.nav_slideshow) {
-
-        } else if (id == R.id.nav_manage) {
-
-        } else if (id == R.id.nav_share) {
-
-        } else if (id == R.id.nav_send) {
-
+            Handler handler = new Handler();
+            handler.postDelayed(new Runnable() {
+                public void run() {
+                    View rootView = getWindow().getDecorView().findViewById(android.R.id.content);
+                    //View rootView = findViewById(R.id.scroller_chat);
+                    Bitmap screenshot = getScreenShot(rootView);
+                    Calendar c = Calendar.getInstance();
+                    int seconds = c.get(Calendar.SECOND);
+                    store(screenshot, "ArmarXSpeech_"+seconds+".jpg");
+                    final String screenShotPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Screenshots";
+                    File screenshotFile = new File(screenShotPath, "ArmarXSpeech_"+seconds+".jpg");
+                    shareImage(screenshotFile);
+                }
+            }, 500);
+        }
+        else if (id == R.id.nav_send)
+        {
+            try
+            {
+                Intent i = new Intent(Intent.ACTION_SEND);
+                i.setType("text/plain");
+                i.putExtra(Intent.EXTRA_SUBJECT, "ArmarXSpeech");
+                String sAux = "Hey, I found this App at the KIT.\n";
+                sAux = sAux + "https://armarx.humanoids.kit.edu/ \n";
+                i.putExtra(Intent.EXTRA_TEXT, sAux);
+                startActivity(Intent.createChooser(i, "choose one"));
+            }
+            catch(Exception e)
+            {
+                //e.toString();
+            }
         }
 
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
