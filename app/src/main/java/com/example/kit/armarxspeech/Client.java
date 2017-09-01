@@ -26,8 +26,8 @@ import armarx.ChatSessionPrxHelper;
 public class Client
 {
     public static final int RECONNECT_DELAY_TIME = 5000;
-    public static String SERVER_IP = "192.168.43.64";
-    public static String SERVER_PORT = "80";
+    public static String SERVER_IP = "i61p100.itec.uka.de";
+    public static String SERVER_PORT = "8080";
 
     private MainActivity _activity;
     private Ice.Communicator _communicator;
@@ -250,7 +250,7 @@ public class Client
         _activity.runOnUiThread(new InfoWriter("Trying to connect to '"+SERVER_IP+":"+SERVER_PORT+"'", ContextCompat.getColor(_activity,R.color.orange)));
 
         _factory.setRouterHost(SERVER_IP);
-        _session = _factory.connect("", "");
+        _session = _factory.connect("", "ArmarXSpeechClient");
     }
 
     private void registerChatCallback()
